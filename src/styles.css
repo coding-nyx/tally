@@ -1,0 +1,303 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Newsreader", Georgia, "Times New Roman", serif;
+
+  --color-paper: #f3f1ec;
+  --color-surface: #fcfbf8;
+  --color-ink: #1c1b18;
+  --color-muted: #5c5852;
+  --color-faint: #6f6b64;
+  --color-line: #e0dbd2;
+  --color-line-strong: #cfc9be;
+  --color-accent: #243044;
+  --color-accent-fg: #f7f6f3;
+  --color-accent-hover: #314158;
+  --color-income: #1a6240;
+  --color-expense: #7f2e28;
+  --color-track: #e6e1d8;
+  --color-bar: #2c3a4e;
+
+  --radius-sm: 0.5rem;
+  --radius-md: 0.75rem;
+  --radius-lg: 1.25rem;
+  --radius-xl: 1.75rem;
+
+  --shadow-panel: 0 1px 2px rgb(28 27 24 / 0.05);
+}
+
+@layer base {
+  html {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  body {
+    margin: 0;
+    min-height: 100vh;
+    background: var(--color-paper);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+    font-size: 1rem;
+    line-height: 1.5;
+  }
+
+  button:not(:disabled),
+  [role="button"]:not(:disabled) {
+    cursor: pointer;
+  }
+
+  h1,
+  h2,
+  h3 {
+    text-wrap: balance;
+  }
+
+  ::selection {
+    background: color-mix(in oklab, var(--color-accent) 16%, white);
+    color: var(--color-ink);
+  }
+}
+
+@layer components {
+  .panel {
+    background: var(--color-surface);
+    border: 1px solid var(--color-line);
+    border-radius: var(--radius-xl);
+    box-shadow: var(--shadow-panel);
+    padding: 1.25rem;
+  }
+
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    height: 2.75rem;
+    padding: 0 1rem;
+    border: 0;
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--color-ink);
+    font: inherit;
+    font-size: 0.9375rem;
+    font-weight: 500;
+    line-height: 1;
+    transition:
+      transform 150ms cubic-bezier(0.22, 1, 0.36, 1),
+      background-color 150ms cubic-bezier(0.22, 1, 0.36, 1),
+      opacity 150ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  .btn:active:not(:disabled) {
+    transform: scale(0.98);
+  }
+
+  .btn:focus-visible,
+  .seg button:focus-visible,
+  .field:focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
+  }
+
+  .btn:disabled {
+    opacity: 0.5;
+  }
+
+  .btn-primary {
+    background: var(--color-accent);
+    color: var(--color-accent-fg);
+  }
+
+  .btn-primary:hover:not(:disabled) {
+    background: var(--color-accent-hover);
+  }
+
+  .btn-quiet:hover:not(:disabled) {
+    background: var(--color-track);
+  }
+
+  .btn-danger {
+    background: var(--color-expense);
+    color: var(--color-accent-fg);
+  }
+
+  .btn-danger:hover:not(:disabled) {
+    background: color-mix(in oklab, var(--color-expense) 88%, black);
+  }
+
+  .btn-icon {
+    width: 2.75rem;
+    padding: 0;
+  }
+
+  .field {
+    height: 2.75rem;
+    width: 100%;
+    border: 1px solid var(--color-line-strong);
+    border-radius: var(--radius-sm);
+    background: var(--color-paper);
+    padding: 0 0.75rem;
+    color: var(--color-ink);
+    font: inherit;
+    color-scheme: light;
+  }
+
+  .field::placeholder {
+    color: var(--color-faint);
+  }
+
+  .field:focus-visible {
+    border-color: transparent;
+    outline-offset: 0;
+  }
+
+  .select {
+    appearance: none;
+    padding-right: 2.25rem;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%235c5852' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 0.75rem center;
+  }
+
+  .seg {
+    display: grid;
+    padding: 0.25rem;
+    border-radius: var(--radius-md);
+    background: var(--color-track);
+  }
+
+  .seg button {
+    height: 2.75rem;
+    border: 0;
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--color-muted);
+    font: inherit;
+    font-size: 0.875rem;
+    font-weight: 500;
+  }
+
+  .seg button[aria-pressed="true"] {
+    background: var(--color-surface);
+    color: var(--color-ink);
+    box-shadow: var(--shadow-panel);
+  }
+
+  .track {
+    height: 0.5rem;
+    overflow: hidden;
+    border-radius: 999px;
+    background: var(--color-track);
+  }
+
+  .track > span {
+    display: block;
+    height: 100%;
+    border-radius: inherit;
+    background: var(--color-bar);
+    transition: width 250ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  .overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 40;
+    background: rgb(28 27 24 / 0.45);
+  }
+
+  .overlay[data-state="open"] {
+    animation: fade-in 250ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  .overlay[data-state="closed"] {
+    animation: fade-in 150ms cubic-bezier(0.22, 1, 0.36, 1) reverse;
+  }
+
+  .dialog {
+    width: min(100%, 28rem);
+    max-height: min(100dvh - 2rem, 40rem);
+    overflow-y: auto;
+    border-radius: var(--radius-xl);
+    background: var(--color-surface);
+    border: 1px solid var(--color-line);
+    box-shadow: var(--shadow-panel);
+    padding: 1.25rem;
+  }
+
+  .dialog[data-state="open"] {
+    animation: dialog-in 250ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  .dialog[data-state="closed"] {
+    animation: dialog-out 150ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  .num-swap {
+    animation: num-in 150ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  .amount-in {
+    color: var(--color-income);
+  }
+
+  .amount-out {
+    color: var(--color-expense);
+  }
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes dialog-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes dialog-out {
+  from {
+    opacity: 1;
+    transform: none;
+  }
+  to {
+    opacity: 0;
+    transform: translateY(6px) scale(0.98);
+  }
+}
+
+@keyframes num-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+    filter: blur(2px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+    filter: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .btn,
+  .track > span,
+  .num-swap,
+  .overlay,
+  .dialog {
+    animation: none;
+    transition: none;
+  }
+}
