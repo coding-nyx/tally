@@ -12,6 +12,37 @@ import {
 } from "./test-fixtures.ts";
 import { agentBaseUrl } from "./client.ts";
 const env = syntheticEnvironment();
+test("forwarded HTTPS origin requires the exact configured socket proxy and canonical headers", () => {
+  const proxyEnv = {
+    ...env,
+    TALLY_AGENT_PUBLIC_ORIGIN: "https://hub.invalid",
+    TALLY_AGENT_TRUSTED_PROXY_IPS: "172.18.0.1",
+  };
+  const proxied = (ip?: string, host = "hub.invalid", proto = "https", origin?: string) => {
+    const req = new Request("http://hub.invalid/finance/api/agent", {
+      headers: {
+        authorization: `Bearer ${SYNTHETIC_AGENT_TOKEN}`,
+        "x-forwarded-host": host,
+        "x-forwarded-proto": proto,
+        "x-forwarded-for": "172.18.0.1",
+        ...(origin ? { origin } : {}),
+      },
+    });
+    if (ip) Object.defineProperty(req, "ip", { value: ip });
+    return req;
+  };
+  assert.equal(authenticate(proxied("::ffff:172.18.0.1"), proxyEnv).role, "agent");
+  for (const req of [
+    proxied(),
+    proxied("172.18.0.99"),
+    proxied("172.18.0.1", "evil.invalid"),
+    proxied("172.18.0.1", "hub.invalid", "https,http"),
+    proxied("172.18.0.1", "hub.invalid", "https", "https://evil.invalid"),
+  ]) {
+    assert.throws(() => authenticate(req, proxyEnv), /origin/);
+  }
+  assert.equal(agentConfigurationReady({ ...proxyEnv, TALLY_AGENT_TRUSTED_PROXY_IPS: "*" }), false);
+});
 const request = (path = "", init: RequestInit = {}, token = SYNTHETIC_AGENT_TOKEN) =>
   new Request(`http://127.0.0.1:8080/finance/api/agent${path}`, {
     ...init,

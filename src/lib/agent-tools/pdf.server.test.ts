@@ -16,6 +16,12 @@ test("server selectable-text PDF extraction preserves reviewable rows and curren
   ] as const)
     page.drawText(text, { x, y, font, size: 10 });
   const result = await extractServerPdf(await document.save());
+  assert.equal(
+    typeof (globalThis as typeof globalThis & { pdfjsWorker?: { WorkerMessageHandler?: unknown } })
+      .pdfjsWorker?.WorkerMessageHandler,
+    "function",
+    "The bundled worker must register its handler before Node text extraction",
+  );
   assert.equal(result.pageCount, 1);
   assert.deepEqual(result.table.headers, ["Date", "Description", "Amount INR", "Currency"]);
   assert.equal(result.table.rows[0].values[3], "INR");

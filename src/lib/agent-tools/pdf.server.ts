@@ -4,6 +4,11 @@ import { ToolError } from "./service.ts";
 export async function extractServerPdf(bytes: Uint8Array) {
   if (bytes.length > 10485760 || new TextDecoder().decode(bytes.slice(0, 5)) !== "%PDF-")
     throw new ToolError("invalid_pdf", "Choose a valid PDF under 10 MB.");
+  // PDF.js defaults to importing a worker by a relative filename. Nitro
+  // relocates the main module, so that filename is absent in the built server.
+  // The worker's own side effect registers its handler for Node's in-process
+  // text extraction; the explicit import also makes both build targets include it.
+  await import("pdfjs-dist/legacy/build/pdf.worker.mjs");
   const { getDocument } = await import("pdfjs-dist/legacy/build/pdf.mjs");
   const task = getDocument({ data: Uint8Array.from(bytes), useSystemFonts: false });
   try {

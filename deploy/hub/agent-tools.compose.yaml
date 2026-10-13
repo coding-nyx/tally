@@ -36,6 +36,9 @@ services:
     environment:
       TALLY_AGENT_ENABLED: "true"
       TALLY_AGENT_PUBLIC_ORIGIN: "${TALLY_AGENT_PUBLIC_ORIGIN:?Set canonical HTTPS origin without /finance}"
+      # Exact socket addresses only. Discover the Caddy-to-container gateway;
+      # do not use client X-Forwarded-For values, wildcard addresses or subnets.
+      TALLY_AGENT_TRUSTED_PROXY_IPS: "${TALLY_AGENT_TRUSTED_PROXY_IPS:-}"
       TALLY_AGENT_DATABASE_URL_FILE: /run/secrets/tally_database_url
       TALLY_AGENT_GRANTS_JSON_FILE: /run/secrets/tally_agent_grants
     secrets:

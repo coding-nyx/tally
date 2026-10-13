@@ -1,8 +1,33 @@
 import { createHash, timingSafeEqual } from "node:crypto";
+import { isIP } from "node:net";
 import { z } from "zod";
 import { scopes } from "./catalog.ts";
 import { ToolError } from "./service.ts";
 import type { Principal } from "./store.ts";
+function trustedProxyAddresses(env: Record<string, string | undefined>) {
+  const source = env.TALLY_AGENT_TRUSTED_PROXY_IPS?.trim();
+  if (!source) return [];
+  const addresses = source.split(",").map((s) => s.trim());
+  if (addresses.length > 8 || addresses.some((s) => !isIP(s)))
+    throw new Error("Invalid trusted proxy addresses");
+  return addresses;
+}
+function requestOrigin(request: Request, env: Record<string, string | undefined>) {
+  const actual = new URL(request.url).origin;
+  if (actual === env.TALLY_AGENT_PUBLIC_ORIGIN) return actual;
+  // srvx supplies this from the accepted socket when proxy trust is disabled.
+  // A client-sent X-Forwarded-For header is never used as this trust decision.
+  const socketIp = (request as Request & { ip?: unknown }).ip;
+  if (typeof socketIp !== "string") return actual;
+  const normalized = socketIp.startsWith("::ffff:") ? socketIp.slice(7) : socketIp;
+  if (!trustedProxyAddresses(env).includes(normalized)) return actual;
+  const proto = request.headers.get("x-forwarded-proto");
+  const host = request.headers.get("x-forwarded-host");
+  const canonical = new URL(env.TALLY_AGENT_PUBLIC_ORIGIN!);
+  // Accept only one exact canonical host/protocol, never a comma-separated chain.
+  if (proto !== canonical.protocol.slice(0, -1) || host !== canonical.host) return actual;
+  return canonical.origin;
+}
 const grantSchema = z
   .strictObject({
     tokenSha256: z.string().regex(/^[a-f0-9]{64}$/),
@@ -32,6 +57,7 @@ export function agentConfigurationReady(env: Record<string, string | undefined> 
   )
     return false;
   try {
+    trustedProxyAddresses(env);
     const origin = new URL(env.TALLY_AGENT_PUBLIC_ORIGIN);
     if (
       origin.origin !== env.TALLY_AGENT_PUBLIC_ORIGIN ||
@@ -65,7 +91,7 @@ export function authenticate(
     throw new ToolError("disabled", "Shared ledger and agent tools are not configured.", 503);
   const canonical = env.TALLY_AGENT_PUBLIC_ORIGIN!;
   if (
-    new URL(request.url).origin !== canonical ||
+    requestOrigin(request, env) !== canonical ||
     (request.headers.has("origin") && request.headers.get("origin") !== canonical)
   )
     throw new ToolError("invalid_origin", "This request origin is not allowed.", 403);
