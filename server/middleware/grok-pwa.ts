@@ -40,6 +40,7 @@ function injectHeadStreaming(response: Response, host: string): Response {
   const injector = createHeadInjector({
     host,
     site: grokOgIdentity.site,
+    basePath: import.meta.env.BASE_URL,
   });
   const transformed = response.body!.pipeThrough(
     new TransformStream<Uint8Array, Uint8Array>({
@@ -67,11 +68,15 @@ export default async function grokPwaMiddleware(
   const method = (event.req.method ?? "GET").toUpperCase();
   if (method !== "GET") return next();
 
-  const path = event.url.pathname;
+  const basePath = import.meta.env.BASE_URL;
+  const prefix = basePath.replace(/\/$/, "");
+  const path = prefix && event.url.pathname.startsWith(`${prefix}/`)
+    ? event.url.pathname.slice(prefix.length)
+    : event.url.pathname;
   const urlWithQuery = path + event.url.search;
 
   if (path === "/__grok/manifest.webmanifest" || path === "/__grok/manifest.json") {
-    return new Response(renderWebManifest(requestHost(event)), {
+    return new Response(renderWebManifest(requestHost(event), { basePath, appName: "Tally" }), {
       headers: {
         "content-type": "application/manifest+json; charset=utf-8",
         "cache-control": "no-cache",
@@ -86,7 +91,8 @@ export default async function grokPwaMiddleware(
   ) {
     const html = renderInstallPageHtml(installPageTemplate, {
       host: requestHost(event),
-      url: urlWithQuery,
+      url: event.url.pathname + event.url.search,
+      basePath,
     });
     return new Response(html, {
       headers: {

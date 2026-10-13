@@ -3,7 +3,8 @@ import * as Dialog from "@radix-ui/react-dialog";
 import {
   categoriesFor,
   centsToInput,
-  parseDollarsToCents,
+  parseMoneyToCents,
+  type Currency,
   type Transaction,
   type TxKind,
 } from "@/lib/budget";
@@ -20,11 +21,12 @@ type EntryDialogProps = {
   mode: "create" | "edit";
   initial: Pick<Transaction, "kind" | "amountCents" | "category" | "note" | "date"> | null;
   defaultDate: string;
+  currency: Currency;
   onClose: () => void;
   onSave: (draft: Draft) => void;
 };
 
-export function EntryDialog({ mode, initial, defaultDate, onClose, onSave }: EntryDialogProps) {
+export function EntryDialog({ mode, initial, defaultDate, currency, onClose, onSave }: EntryDialogProps) {
   const [kind, setKind] = useState<TxKind>(initial?.kind ?? "expense");
   const [amount, setAmount] = useState(initial ? centsToInput(initial.amountCents) : "");
   const [category, setCategory] = useState(initial?.category ?? categoriesFor(initial?.kind ?? "expense")[0]);
@@ -43,7 +45,7 @@ export function EntryDialog({ mode, initial, defaultDate, onClose, onSave }: Ent
 
   function submit(event: FormEvent) {
     event.preventDefault();
-    const amountCents = parseDollarsToCents(amount);
+    const amountCents = parseMoneyToCents(amount);
     if (amountCents === null) {
       setError("Enter an amount greater than zero, like 42.50.");
       return;
@@ -97,7 +99,7 @@ export function EntryDialog({ mode, initial, defaultDate, onClose, onSave }: Ent
                 </label>
                 <div className="relative">
                   <span className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-muted">
-                    $
+                    {currency === "INR" ? "₹" : "$"}
                   </span>
                   <input
                     id="amount"

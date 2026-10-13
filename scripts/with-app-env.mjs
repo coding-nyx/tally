@@ -31,8 +31,8 @@ const VITE_PREFIX = "VITE_";
 
 /**
  * Parse an app-env document, keeping only `VITE_`-prefixed string entries.
- * Anything unparseable is an empty environment — a workspace without the file
- * must behave exactly like today (auth on, no overrides).
+ * Anything unparseable is an empty environment. A workspace without the file
+ * defaults auth off, matching Tally's local-first, no-account scope.
  */
 export function parseAppEnv(text) {
   let parsed;
@@ -51,12 +51,12 @@ export function parseAppEnv(text) {
   return env;
 }
 
-/** The app env recorded under `root`, or `{}` when the file is absent. */
+/** The app env recorded under `root`; a missing file defaults to local-first. */
 export function readAppEnv(root) {
   try {
     return parseAppEnv(readFileSync(join(root, APP_ENV_REL_PATH), "utf8"));
   } catch {
-    return {};
+    return { VITE_AUTH_ENABLED: "false" };
   }
 }
 
