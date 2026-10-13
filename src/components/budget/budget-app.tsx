@@ -1,6 +1,7 @@
 import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import { ChevronLeft, ChevronRight, Pencil, Plus, Trash2 } from "lucide-react";
 import { EntryDialog } from "@/components/budget/entry-dialog";
+import { Link } from "@tanstack/react-router";
 import { StatementImportDialog } from "@/components/budget/statement-import-dialog";
 import { SpendingChatPanel } from "@/components/budget/spending-chat-panel";
 import { transactionsToCsv, type StagedTransaction } from "@/lib/bank-statement";
@@ -36,9 +37,7 @@ const SpendChart = lazy(() =>
 
 type Filter = "all" | TxKind;
 
-type Editor =
-  | { mode: "create" }
-  | { mode: "edit"; tx: Transaction };
+type Editor = { mode: "create" } | { mode: "edit"; tx: Transaction };
 
 function groupByDate(transactions: Transaction[]): Array<{ date: string; items: Transaction[] }> {
   const groups: Array<{ date: string; items: Transaction[] }> = [];
@@ -93,7 +92,9 @@ export function BudgetApp() {
         saveBudget(data);
         setPersistenceError("");
       } catch {
-        setPersistenceError("Tally could not save to this browser. Export a backup before leaving this page.");
+        setPersistenceError(
+          "Tally could not save to this browser. Export a backup before leaving this page.",
+        );
       }
     }
   }, [data]);
@@ -117,8 +118,7 @@ export function BudgetApp() {
     const spending = monthTx
       .filter((tx) => tx.kind === "expense")
       .reduce((sum, tx) => sum + tx.amountCents, 0);
-    const visible =
-      filter === "all" ? monthTx : monthTx.filter((tx) => tx.kind === filter);
+    const visible = filter === "all" ? monthTx : monthTx.filter((tx) => tx.kind === filter);
     return {
       monthTx,
       visible,
@@ -192,7 +192,10 @@ export function BudgetApp() {
     }
     const cents = parseMoneyToCents(input);
     if (cents === null) {
-      setBudgetErrors((current) => ({ ...current, [category]: "Enter a limit above zero, or leave blank for no limit." }));
+      setBudgetErrors((current) => ({
+        ...current,
+        [category]: "Enter a limit above zero, or leave blank for no limit.",
+      }));
       return;
     }
     update((currentData) => {
@@ -239,7 +242,12 @@ export function BudgetApp() {
     setLoadError(null);
     setPersistenceError("");
     setStatementImportOpen(false);
-    setMonth(imported.map((transaction) => transaction.date.slice(0, 7)).sort().at(-1) ?? monthKey(new Date()));
+    setMonth(
+      imported
+        .map((transaction) => transaction.date.slice(0, 7))
+        .sort()
+        .at(-1) ?? monthKey(new Date()),
+    );
   }
 
   async function restoreBackup(file: File | undefined) {
@@ -261,7 +269,9 @@ export function BudgetApp() {
       setPersistenceError("");
       setMonth(monthKey(new Date()));
     } catch {
-      setRecoveryError("This browser could not save the restored backup. Try freeing browser storage and import again.");
+      setRecoveryError(
+        "This browser could not save the restored backup. Try freeing browser storage and import again.",
+      );
     }
   }
 
@@ -272,7 +282,9 @@ export function BudgetApp() {
           <h1 className="font-display text-3xl tracking-tight">Recover your Tally ledger</h1>
           <section className="panel" role="alert">
             <p className="font-medium">Your saved data was not changed.</p>
-            <p className="mt-2 text-sm text-muted">{loadError.message} Import a valid Tally JSON backup to restore it.</p>
+            <p className="mt-2 text-sm text-muted">
+              {loadError.message} Import a valid Tally JSON backup to restore it.
+            </p>
             <div className="mt-4 flex flex-wrap gap-2">
               <label className="btn btn-primary">
                 Import backup
@@ -285,7 +297,9 @@ export function BudgetApp() {
                     if (!file) return;
                     const restored = parseBackup(await file.text());
                     if (!restored) {
-                      setRecoveryError("That file is not a valid Tally backup. The saved value is still untouched.");
+                      setRecoveryError(
+                        "That file is not a valid Tally backup. The saved value is still untouched.",
+                      );
                       return;
                     }
                     try {
@@ -294,7 +308,9 @@ export function BudgetApp() {
                       setLoadError(null);
                       setRecoveryError("");
                     } catch {
-                      setRecoveryError("This browser could not save the restored backup. Try freeing browser storage and import again.");
+                      setRecoveryError(
+                        "This browser could not save the restored backup. Try freeing browser storage and import again.",
+                      );
                     }
                   }}
                 />
@@ -309,7 +325,11 @@ export function BudgetApp() {
                 </button>
               ) : null}
             </div>
-            {recoveryError ? <p className="mt-3 text-sm text-expense" role="alert">{recoveryError}</p> : null}
+            {recoveryError ? (
+              <p className="mt-3 text-sm text-expense" role="alert">
+                {recoveryError}
+              </p>
+            ) : null}
           </section>
         </main>
       );
@@ -405,120 +425,155 @@ export function BudgetApp() {
           </div>
           <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center sm:justify-end">
             <div className="grid w-full grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-2 sm:w-auto">
-            <label className="sr-only" htmlFor="currency-select">Ledger currency</label>
-            <select
-              id="currency-select"
-              className="field select min-w-0 w-full sm:min-w-36 sm:w-auto"
-              aria-label="Ledger currency"
-              value={data.currency}
-              onChange={(event) => changeCurrency(event.target.value as Currency)}
-            >
-              <option value="INR">INR · Indian rupee</option>
-              <option value="USD">USD · US dollar</option>
-            </select>
-            <details className="relative min-w-0">
-              <summary className="btn btn-quiet list-none whitespace-nowrap [&::-webkit-details-marker]:hidden" aria-label="More data actions">More</summary>
-              <div className="absolute right-0 top-full z-30 mt-2 flex min-w-52 flex-col rounded-md border border-line bg-surface p-1 shadow-lg" aria-label="More data actions">
-                <button
-                  type="button"
-                  className="btn h-auto min-h-11 justify-start px-3 text-left"
-                  onClick={(event) => {
-                    downloadText(`tally-${data.currency.toLowerCase()}-${month}.json`, makeBackup(data));
-                    event.currentTarget.closest("details")?.removeAttribute("open");
-                  }}
+              <label className="sr-only" htmlFor="currency-select">
+                Ledger currency
+              </label>
+              <select
+                id="currency-select"
+                className="field select min-w-0 w-full sm:min-w-36 sm:w-auto"
+                aria-label="Ledger currency"
+                value={data.currency}
+                onChange={(event) => changeCurrency(event.target.value as Currency)}
+              >
+                <option value="INR">INR · Indian rupee</option>
+                <option value="USD">USD · US dollar</option>
+              </select>
+              <details className="relative min-w-0">
+                <summary
+                  className="btn btn-quiet list-none whitespace-nowrap [&::-webkit-details-marker]:hidden"
+                  aria-label="More data actions"
                 >
-                  Export backup
-                </button>
-                <button
-                  type="button"
-                  className="btn h-auto min-h-11 justify-start px-3 text-left"
-                  onClick={(event) => {
-                    downloadText(
-                      `tally-${data.currency.toLowerCase()}-transactions.csv`,
-                      transactionsToCsv(data.transactions, data.currency),
-                      "text/csv;charset=utf-8",
-                    );
-                    event.currentTarget.closest("details")?.removeAttribute("open");
-                  }}
+                  More
+                </summary>
+                <div
+                  className="absolute right-0 top-full z-30 mt-2 flex min-w-52 flex-col rounded-md border border-line bg-surface p-1 shadow-lg"
+                  aria-label="More data actions"
                 >
-                  Export CSV
-                </button>
-                <button
-                  type="button"
-                  className="btn h-auto min-h-11 justify-start px-3 text-left"
-                  disabled={reportExporting}
-                  onClick={(event) => {
-                    void exportReport();
-                    event.currentTarget.closest("details")?.removeAttribute("open");
-                  }}
-                >
-                  {reportExporting ? "Preparing PDF…" : "Export monthly PDF"}
-                </button>
-                <button
-                  type="button"
-                  className="btn h-auto min-h-11 justify-start px-3 text-left"
-                  onClick={(event) => {
-                    setStatementImportOpen(true);
-                    event.currentTarget.closest("details")?.removeAttribute("open");
-                  }}
-                >
-                  Import statement
-                </button>
-                <label className="btn h-auto min-h-11 justify-start px-3 text-left">
-                  Restore backup
-                  <input
-                    className="sr-only"
-                    type="file"
-                    accept="application/json,.json"
-                    onChange={(event) => {
-                      void restoreBackup(event.target.files?.[0]);
-                      event.currentTarget.value = "";
+                  <button
+                    type="button"
+                    className="btn h-auto min-h-11 justify-start px-3 text-left"
+                    onClick={(event) => {
+                      downloadText(
+                        `tally-${data.currency.toLowerCase()}-${month}.json`,
+                        makeBackup(data),
+                      );
                       event.currentTarget.closest("details")?.removeAttribute("open");
                     }}
-                  />
-                </label>
-              </div>
-            </details>
-            <button type="button" id="add-entry" className="btn btn-primary whitespace-nowrap" onClick={openCreate}>
-              <Plus className="size-4" aria-hidden="true" />
-              Add entry
-            </button>
+                  >
+                    Export backup
+                  </button>
+                  <button
+                    type="button"
+                    className="btn h-auto min-h-11 justify-start px-3 text-left"
+                    onClick={(event) => {
+                      downloadText(
+                        `tally-${data.currency.toLowerCase()}-transactions.csv`,
+                        transactionsToCsv(data.transactions, data.currency),
+                        "text/csv;charset=utf-8",
+                      );
+                      event.currentTarget.closest("details")?.removeAttribute("open");
+                    }}
+                  >
+                    Export CSV
+                  </button>
+                  <button
+                    type="button"
+                    className="btn h-auto min-h-11 justify-start px-3 text-left"
+                    disabled={reportExporting}
+                    onClick={(event) => {
+                      void exportReport();
+                      event.currentTarget.closest("details")?.removeAttribute("open");
+                    }}
+                  >
+                    {reportExporting ? "Preparing PDF…" : "Export monthly PDF"}
+                  </button>
+                  <button
+                    type="button"
+                    className="btn h-auto min-h-11 justify-start px-3 text-left"
+                    onClick={(event) => {
+                      setStatementImportOpen(true);
+                      event.currentTarget.closest("details")?.removeAttribute("open");
+                    }}
+                  >
+                    Import statement
+                  </button>
+                  <label className="btn h-auto min-h-11 justify-start px-3 text-left">
+                    Restore backup
+                    <input
+                      className="sr-only"
+                      type="file"
+                      accept="application/json,.json"
+                      onChange={(event) => {
+                        void restoreBackup(event.target.files?.[0]);
+                        event.currentTarget.value = "";
+                        event.currentTarget.closest("details")?.removeAttribute("open");
+                      }}
+                    />
+                  </label>
+                </div>
+              </details>
+              <button
+                type="button"
+                id="add-entry"
+                className="btn btn-primary whitespace-nowrap"
+                onClick={openCreate}
+              >
+                <Plus className="size-4" aria-hidden="true" />
+                Add entry
+              </button>
             </div>
-            <nav className="flex w-full items-center justify-between gap-2 sm:w-auto sm:justify-center" aria-label="Month navigation">
+            <nav
+              className="flex w-full items-center justify-between gap-2 sm:w-auto sm:justify-center"
+              aria-label="Month navigation"
+            >
               <div className="flex min-w-0 items-center">
-              <button
-                type="button"
-                className="btn btn-quiet btn-icon"
-                aria-label="Previous month"
-                onClick={() => setMonth((value) => (value ? shiftMonth(value, -1) : value))}
-              >
-                <ChevronLeft className="size-5" aria-hidden="true" />
-              </button>
-              <p className="min-w-0 flex-1 px-1 text-center font-medium sm:min-w-40">{title}</p>
-              <button
-                type="button"
-                className="btn btn-quiet btn-icon"
-                aria-label="Next month"
-                onClick={() => setMonth((value) => (value ? shiftMonth(value, 1) : value))}
-              >
-                <ChevronRight className="size-5" aria-hidden="true" />
-              </button>
+                <button
+                  type="button"
+                  className="btn btn-quiet btn-icon"
+                  aria-label="Previous month"
+                  onClick={() => setMonth((value) => (value ? shiftMonth(value, -1) : value))}
+                >
+                  <ChevronLeft className="size-5" aria-hidden="true" />
+                </button>
+                <p className="min-w-0 flex-1 px-1 text-center font-medium sm:min-w-40">{title}</p>
+                <button
+                  type="button"
+                  className="btn btn-quiet btn-icon"
+                  aria-label="Next month"
+                  onClick={() => setMonth((value) => (value ? shiftMonth(value, 1) : value))}
+                >
+                  <ChevronRight className="size-5" aria-hidden="true" />
+                </button>
               </div>
-            {month !== current ? (
-              <button type="button" className="btn btn-quiet shrink-0" onClick={() => setMonth(current)}>
-                This month
-              </button>
-            ) : null}
+              {month !== current ? (
+                <button
+                  type="button"
+                  className="btn btn-quiet shrink-0"
+                  onClick={() => setMonth(current)}
+                >
+                  This month
+                </button>
+              ) : null}
             </nav>
           </div>
         </header>
 
         {persistenceError ? (
-          <p className="rounded-md border border-expense/30 bg-expense/5 px-4 py-3 text-sm" role="alert">
+          <p
+            className="rounded-md border border-expense/30 bg-expense/5 px-4 py-3 text-sm"
+            role="alert"
+          >
             {persistenceError} Use Export backup to keep a copy.
           </p>
         ) : null}
-        {reportExportError ? <p className="rounded-md border border-expense/30 bg-expense/5 px-4 py-3 text-sm" role="alert">{reportExportError}</p> : null}
+        {reportExportError ? (
+          <p
+            className="rounded-md border border-expense/30 bg-expense/5 px-4 py-3 text-sm"
+            role="alert"
+          >
+            {reportExportError}
+          </p>
+        ) : null}
 
         <section className="panel" aria-labelledby="remaining-label">
           <div className="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
@@ -622,12 +677,20 @@ export function BudgetApp() {
                     >
                       Remove sample entries
                     </button>
-                    <button type="button" className="btn btn-quiet" onClick={() => setConfirmClear(false)}>
+                    <button
+                      type="button"
+                      className="btn btn-quiet"
+                      onClick={() => setConfirmClear(false)}
+                    >
                       Cancel
                     </button>
                   </div>
                 ) : (
-                  <button type="button" className="btn btn-quiet mt-2" onClick={() => setConfirmClear(true)}>
+                  <button
+                    type="button"
+                    className="btn btn-quiet mt-2"
+                    onClick={() => setConfirmClear(true)}
+                  >
                     Remove sample entries
                   </button>
                 )}
@@ -657,7 +720,10 @@ export function BudgetApp() {
                         const meta = tx.note || (tx.kind === "income" ? "Income" : "Expense");
                         const confirming = pendingDelete === tx.id;
                         return (
-                          <li key={tx.id} className="border-t border-line py-3 first:border-t-0 first:pt-0">
+                          <li
+                            key={tx.id}
+                            className="border-t border-line py-3 first:border-t-0 first:pt-0"
+                          >
                             <div className="flex items-center gap-2">
                               <div className="min-w-0 flex-1">
                                 <div className="flex items-baseline justify-between gap-3">
@@ -760,13 +826,21 @@ export function BudgetApp() {
                       >
                         Clear this month
                       </button>
-                      <button type="button" className="btn btn-quiet" onClick={() => setConfirmClear(false)}>
+                      <button
+                        type="button"
+                        className="btn btn-quiet"
+                        onClick={() => setConfirmClear(false)}
+                      >
                         Cancel
                       </button>
                     </div>
                   </div>
                 ) : (
-                  <button type="button" className="btn btn-quiet" onClick={() => setConfirmClear(true)}>
+                  <button
+                    type="button"
+                    className="btn btn-quiet"
+                    onClick={() => setConfirmClear(true)}
+                  >
                     Clear this month
                   </button>
                 )}
@@ -845,7 +919,11 @@ export function BudgetApp() {
                     </p>
                   ) : null}
                   <div className="flex justify-end gap-2">
-                    <button type="button" className="btn btn-quiet" onClick={() => setGoalEdit(false)}>
+                    <button
+                      type="button"
+                      className="btn btn-quiet"
+                      onClick={() => setGoalEdit(false)}
+                    >
                       Cancel
                     </button>
                     <button type="submit" className="btn btn-primary">
@@ -875,7 +953,9 @@ export function BudgetApp() {
                       </>
                     ) : (
                       <>
-                        <span className="font-medium">{formatMoney(Math.max(view.remaining, 0), data.currency)}</span>
+                        <span className="font-medium">
+                          {formatMoney(Math.max(view.remaining, 0), data.currency)}
+                        </span>
                         <span className="text-muted"> of {formatMoney(target, data.currency)}</span>
                         <span className="text-muted"> · {percent}%</span>
                       </>
@@ -889,8 +969,13 @@ export function BudgetApp() {
             <SpendingChatPanel data={data} month={month} />
 
             <section className="panel" aria-labelledby="budgets-heading">
-              <h2 id="budgets-heading" className="text-lg font-medium">Monthly category budgets</h2>
-              <p className="mt-1 text-sm text-muted">Each month has its own limits. Leave an amount blank for no limit; a zero limit is not allowed.</p>
+              <h2 id="budgets-heading" className="text-lg font-medium">
+                Monthly category budgets
+              </h2>
+              <p className="mt-1 text-sm text-muted">
+                Each month has its own limits. Leave an amount blank for no limit; a zero limit is
+                not allowed.
+              </p>
               <ul className="mt-4 flex flex-col">
                 {EXPENSE_CATEGORIES.map((category) => {
                   const spent = view.rows.find((row) => row.category === category)?.cents ?? 0;
@@ -899,7 +984,9 @@ export function BudgetApp() {
                   const amount = budgetDrafts[category] ?? (limit ? centsToInput(limit) : "");
                   const statusLabel = {
                     "no-limit": "No limit",
-                    under: limit ? `${formatMoney(Math.max(limit - spent, 0), data.currency)} left` : "Under limit",
+                    under: limit
+                      ? `${formatMoney(Math.max(limit - spent, 0), data.currency)} left`
+                      : "Under limit",
                     near: "Near limit · 80%+",
                     at: "At limit",
                     over: `Over by ${formatMoney(spent - (limit ?? 0), data.currency)}`,
@@ -909,7 +996,9 @@ export function BudgetApp() {
                       <div className="flex flex-wrap items-start justify-between gap-2">
                         <div>
                           <p className="font-medium">{category}</p>
-                          <p className={`mt-0.5 text-sm ${status === "over" || status === "at" ? "amount-out" : "text-muted"}`}>
+                          <p
+                            className={`mt-0.5 text-sm ${status === "over" || status === "at" ? "amount-out" : "text-muted"}`}
+                          >
                             {formatMoney(spent, data.currency)} spent · {statusLabel}
                           </p>
                         </div>
@@ -921,7 +1010,9 @@ export function BudgetApp() {
                             saveCategoryBudget(category);
                           }}
                         >
-                          <label className="sr-only" htmlFor={`budget-${category}`}>Monthly limit for {category}</label>
+                          <label className="sr-only" htmlFor={`budget-${category}`}>
+                            Monthly limit for {category}
+                          </label>
                           <div className="relative w-36">
                             <span className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-muted">
                               {data.currency === "INR" ? "₹" : "$"}
@@ -933,15 +1024,24 @@ export function BudgetApp() {
                               placeholder="No limit"
                               value={amount}
                               onChange={(event) => {
-                                setBudgetDrafts((drafts) => ({ ...drafts, [category]: event.target.value }));
+                                setBudgetDrafts((drafts) => ({
+                                  ...drafts,
+                                  [category]: event.target.value,
+                                }));
                                 setBudgetErrors((errors) => ({ ...errors, [category]: "" }));
                               }}
                             />
                           </div>
-                          <button type="submit" className="btn btn-quiet">Save</button>
+                          <button type="submit" className="btn btn-quiet">
+                            Save
+                          </button>
                         </form>
                       </div>
-                      {budgetErrors[category] ? <p className="mt-1 text-sm text-expense" role="alert">{budgetErrors[category]}</p> : null}
+                      {budgetErrors[category] ? (
+                        <p className="mt-1 text-sm text-expense" role="alert">
+                          {budgetErrors[category]}
+                        </p>
+                      ) : null}
                     </li>
                   );
                 })}
@@ -953,7 +1053,9 @@ export function BudgetApp() {
                 Spending by category
               </h2>
               <p className="mt-1 text-sm text-muted">
-                {top ? `${top.category} is ${top.share}% of spending in ${title}.` : `No spending in ${title}.`}
+                {top
+                  ? `${top.category} is ${top.share}% of spending in ${title}.`
+                  : `No spending in ${title}.`}
               </p>
               {view.rows.length === 0 ? null : (
                 <>
@@ -988,7 +1090,12 @@ export function BudgetApp() {
           </div>
         </div>
 
-        <p className="text-center text-xs text-faint">Saved on this device.</p>
+        <p className="text-center text-xs text-faint">
+          Saved on this device.{" "}
+          <Link to="/agents" className="text-accent">
+            Shared workspace and agent tools
+          </Link>
+        </p>
       </div>
 
       {editor ? (
@@ -1031,9 +1138,15 @@ export function BudgetApp() {
       ) : null}
       {data ? (
         <StatementImportDialog
+          key={data.currency}
           open={statementImportOpen}
           currency={data.currency}
-          existing={data.transactions}
+          getExisting={(currency) => {
+            if (currency === data.currency) return data.transactions;
+            const result = loadBudget(new Date(), currency);
+            if (result.status === "error") throw new Error(result.message);
+            return result.data.transactions;
+          }}
           onOpenChange={setStatementImportOpen}
           onConfirm={importStatement}
         />
