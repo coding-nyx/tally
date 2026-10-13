@@ -1,0 +1,22 @@
+{
+	# Tailscale terminates private HTTPS; only its loopback proxy reaches Caddy.
+	admin 127.0.0.1:2019
+	auto_https off
+	servers {
+		trusted_proxies static 127.0.0.1/32 ::1/128
+	}
+}
+
+http://finance.example.ts.net:9080, http://127.0.0.1:9080 {
+	bind 127.0.0.1
+	encode gzip
+	@financeRoot path /finance
+	redir @financeRoot /finance/ 308
+	handle /finance/* {
+		# Preserve the prefix: the app's router, assets and server functions use it.
+		reverse_proxy 127.0.0.1:3001
+	}
+	handle {
+		respond "Not found" 404
+	}
+}

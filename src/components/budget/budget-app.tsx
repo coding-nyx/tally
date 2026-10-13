@@ -1,21 +1,31 @@
 import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import { ChevronLeft, ChevronRight, Pencil, Plus, Trash2 } from "lucide-react";
 import { EntryDialog } from "@/components/budget/entry-dialog";
+import { StatementImportDialog } from "@/components/budget/statement-import-dialog";
+import { SpendingChatPanel } from "@/components/budget/spending-chat-panel";
+import { transactionsToCsv, type StagedTransaction } from "@/lib/bank-statement";
+import { createTransactionReportPdf } from "@/lib/transaction-report-pdf";
 import {
   centsToInput,
   defaultDateForMonth,
   formatDay,
   formatMoney,
   formatSigned,
+  budgetStatus,
+  EXPENSE_CATEGORIES,
   inMonth,
   loadBudget,
+  makeBackup,
   monthKey,
   monthTitle,
-  parseDollarsToCents,
+  parseBackup,
+  parseMoneyToCents,
   saveBudget,
+  settingsForMonth,
   shiftMonth,
   spendingByCategory,
   type BudgetData,
+  type Currency,
   type Transaction,
   type TxKind,
 } from "@/lib/budget";
@@ -40,6 +50,15 @@ function groupByDate(transactions: Transaction[]): Array<{ date: string; items: 
   return groups;
 }
 
+function downloadText(filename: string, text: string, mimeType = "application/json;charset=utf-8") {
+  const url = URL.createObjectURL(new Blob([text], { type: mimeType }));
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
 export function BudgetApp() {
   const [data, setData] = useState<BudgetData | null>(null);
   const [month, setMonth] = useState<string | null>(null);
@@ -51,21 +70,40 @@ export function BudgetApp() {
   const [goalName, setGoalName] = useState("");
   const [goalTarget, setGoalTarget] = useState("");
   const [goalError, setGoalError] = useState("");
+  const [loadError, setLoadError] = useState<{ message: string; raw: string | null } | null>(null);
+  const [persistenceError, setPersistenceError] = useState("");
+  const [recoveryError, setRecoveryError] = useState("");
+  const [budgetDrafts, setBudgetDrafts] = useState<Record<string, string>>({});
+  const [budgetErrors, setBudgetErrors] = useState<Record<string, string>>({});
+  const [statementImportOpen, setStatementImportOpen] = useState(false);
+  const [reportExporting, setReportExporting] = useState(false);
+  const [reportExportError, setReportExportError] = useState("");
 
   useEffect(() => {
     const now = new Date();
-    setData(loadBudget(now));
+    const result = loadBudget(now);
+    if (result.status === "error") setLoadError({ message: result.message, raw: result.raw });
+    else setData(result.data);
     setMonth(monthKey(now));
   }, []);
 
   useEffect(() => {
-    if (data) saveBudget(data);
+    if (data) {
+      try {
+        saveBudget(data);
+        setPersistenceError("");
+      } catch {
+        setPersistenceError("Tally could not save to this browser. Export a backup before leaving this page.");
+      }
+    }
   }, [data]);
 
   useEffect(() => {
     setPendingDelete(null);
     setConfirmClear(false);
     setGoalEdit(false);
+    setBudgetDrafts({});
+    setBudgetErrors({});
   }, [month]);
 
   const view = useMemo(() => {
@@ -100,7 +138,182 @@ export function BudgetApp() {
     setEditor({ mode: "create" });
   }
 
+  function changeCurrency(currency: Currency) {
+    const result = loadBudget(new Date(), currency);
+    if (result.status === "error") {
+      setLoadError({ message: result.message, raw: result.raw });
+      setData(null);
+      return;
+    }
+    setLoadError(null);
+    setPersistenceError("");
+    setData(result.data);
+    setMonth(monthKey(new Date()));
+  }
+
+  async function exportReport() {
+    if (!data || !month || reportExporting) return;
+    setReportExporting(true);
+    setReportExportError("");
+    try {
+      const bytes = await createTransactionReportPdf(data, month);
+      const url = URL.createObjectURL(new Blob([bytes as BlobPart], { type: "application/pdf" }));
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `tally-${data.currency.toLowerCase()}-${month}-report.pdf`;
+      link.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      setReportExportError("Tally could not create this PDF report. Try exporting again.");
+    } finally {
+      setReportExporting(false);
+    }
+  }
+
+  function saveCategoryBudget(category: string) {
+    const selectedMonth = month;
+    if (!selectedMonth) return;
+    const input = budgetDrafts[category] ?? "";
+    if (input.trim() === "") {
+      update((currentData) => {
+        const currentSettings = settingsForMonth(currentData, selectedMonth);
+        const categoryBudgets = { ...currentSettings.categoryBudgets };
+        delete categoryBudgets[category];
+        return {
+          ...currentData,
+          settingsByMonth: {
+            ...currentData.settingsByMonth,
+            [selectedMonth]: { ...currentSettings, categoryBudgets },
+          },
+        };
+      });
+      setBudgetErrors((current) => ({ ...current, [category]: "" }));
+      return;
+    }
+    const cents = parseMoneyToCents(input);
+    if (cents === null) {
+      setBudgetErrors((current) => ({ ...current, [category]: "Enter a limit above zero, or leave blank for no limit." }));
+      return;
+    }
+    update((currentData) => {
+      const currentSettings = settingsForMonth(currentData, selectedMonth);
+      return {
+        ...currentData,
+        settingsByMonth: {
+          ...currentData.settingsByMonth,
+          [selectedMonth]: {
+            ...currentSettings,
+            categoryBudgets: { ...currentSettings.categoryBudgets, [category]: cents },
+          },
+        },
+      };
+    });
+    setBudgetErrors((current) => ({ ...current, [category]: "" }));
+  }
+
+  function importStatement(currency: Currency, rows: StagedTransaction[]) {
+    if (!data || rows.length === 0) return;
+    let destination = data;
+    if (data.currency !== currency) {
+      const result = loadBudget(new Date(), currency);
+      if (result.status === "error") {
+        setLoadError({ message: result.message, raw: result.raw });
+        setData(null);
+        setStatementImportOpen(false);
+        return;
+      }
+      destination = result.data;
+    }
+    const imported: Transaction[] = rows.map((row) => ({
+      ...row,
+      id: crypto.randomUUID(),
+      createdAt: Date.now(),
+      sample: false,
+    }));
+    const next: BudgetData = {
+      ...destination,
+      transactions: [...destination.transactions, ...imported],
+      sample: destination.transactions.some((transaction) => transaction.sample),
+    };
+    setData(next);
+    setLoadError(null);
+    setPersistenceError("");
+    setStatementImportOpen(false);
+    setMonth(imported.map((transaction) => transaction.date.slice(0, 7)).sort().at(-1) ?? monthKey(new Date()));
+  }
+
+  async function restoreBackup(file: File | undefined) {
+    if (!file) return;
+    const restored = parseBackup(await file.text());
+    if (!restored) {
+      setRecoveryError("That file is not a valid Tally backup.");
+      return;
+    }
+    const confirmed = window.confirm(
+      `Replace the saved ${restored.currency} ledger with this backup? This replaces that currency's ledger on this device.`,
+    );
+    if (!confirmed) return;
+    try {
+      saveBudget(restored);
+      setData(restored);
+      setLoadError(null);
+      setRecoveryError("");
+      setPersistenceError("");
+      setMonth(monthKey(new Date()));
+    } catch {
+      setRecoveryError("This browser could not save the restored backup. Try freeing browser storage and import again.");
+    }
+  }
+
   if (!data || !month || !view) {
+    if (loadError) {
+      return (
+        <main className="mx-auto flex w-full max-w-xl flex-col gap-4 px-4 py-10 sm:px-6">
+          <h1 className="font-display text-3xl tracking-tight">Recover your Tally ledger</h1>
+          <section className="panel" role="alert">
+            <p className="font-medium">Your saved data was not changed.</p>
+            <p className="mt-2 text-sm text-muted">{loadError.message} Import a valid Tally JSON backup to restore it.</p>
+            <div className="mt-4 flex flex-wrap gap-2">
+              <label className="btn btn-primary">
+                Import backup
+                <input
+                  className="sr-only"
+                  type="file"
+                  accept="application/json,.json"
+                  onChange={async (event) => {
+                    const file = event.target.files?.[0];
+                    if (!file) return;
+                    const restored = parseBackup(await file.text());
+                    if (!restored) {
+                      setRecoveryError("That file is not a valid Tally backup. The saved value is still untouched.");
+                      return;
+                    }
+                    try {
+                      saveBudget(restored);
+                      setData(restored);
+                      setLoadError(null);
+                      setRecoveryError("");
+                    } catch {
+                      setRecoveryError("This browser could not save the restored backup. Try freeing browser storage and import again.");
+                    }
+                  }}
+                />
+              </label>
+              {loadError.raw !== null ? (
+                <button
+                  type="button"
+                  className="btn btn-quiet"
+                  onClick={() => downloadText("tally-recovery.json", loadError.raw ?? "")}
+                >
+                  Download saved value
+                </button>
+              ) : null}
+            </div>
+            {recoveryError ? <p className="mt-3 text-sm text-expense" role="alert">{recoveryError}</p> : null}
+          </section>
+        </main>
+      );
+    }
     return (
       <main className="mx-auto flex w-full max-w-5xl flex-col gap-5 px-4 py-6 sm:px-6 sm:py-10">
         <div className="h-10 w-36 rounded-sm bg-track" />
@@ -112,27 +325,28 @@ export function BudgetApp() {
 
   const current = monthKey(new Date());
   const title = monthTitle(month);
-  const target = data.goalTargetCents;
+  const settings = settingsForMonth(data, month);
+  const target = settings.goalTargetCents;
   const progress =
     target > 0 ? Math.min(100, Math.max(0, (Math.max(view.remaining, 0) / target) * 100)) : 0;
   const percent = Math.round(progress);
   const gap = target - view.remaining;
 
   let goalLabel = "Still to save";
-  let goalValue = formatMoney(Math.max(gap, 0));
-  let goalDetail = `${formatMoney(Math.max(gap, 0))} still to set aside.`;
+  let goalValue = formatMoney(Math.max(gap, 0), data.currency);
+  let goalDetail = `${formatMoney(Math.max(gap, 0), data.currency)} still to set aside.`;
   if (view.remaining < 0) {
     goalLabel = "Overspent";
-    goalValue = formatMoney(Math.abs(view.remaining));
-    goalDetail = `Overspent by ${formatMoney(Math.abs(view.remaining))}. The goal waits until spending comes back down.`;
+    goalValue = formatMoney(Math.abs(view.remaining), data.currency);
+    goalDetail = `Overspent by ${formatMoney(Math.abs(view.remaining), data.currency)}. The goal waits until spending comes back down.`;
   } else if (view.remaining >= target) {
     const extra = view.remaining - target;
     goalLabel = extra === 0 ? "Goal met" : "Ahead";
-    goalValue = formatMoney(extra);
+    goalValue = formatMoney(extra, data.currency);
     goalDetail =
       extra === 0
         ? "The savings goal is met for this month."
-        : `Goal met, with ${formatMoney(extra)} still unspent.`;
+        : `Goal met, with ${formatMoney(extra, data.currency)} still unspent.`;
   }
 
   const rowIsSample = (tx: Transaction) => tx.sample !== false && Boolean(tx.sample || data.sample);
@@ -142,8 +356,10 @@ export function BudgetApp() {
   const top = view.rows[0];
 
   function saveGoal() {
+    const selectedMonth = month;
+    if (!selectedMonth) return;
     const name = goalName.trim();
-    const cents = parseDollarsToCents(goalTarget);
+    const cents = parseMoneyToCents(goalTarget);
     if (name.length === 0) {
       setGoalError("Name the goal.");
       return;
@@ -154,8 +370,14 @@ export function BudgetApp() {
     }
     update((currentData) => ({
       ...currentData,
-      goalName: name.slice(0, 40),
-      goalTargetCents: cents,
+      settingsByMonth: {
+        ...currentData.settingsByMonth,
+        [selectedMonth]: {
+          ...settingsForMonth(currentData, selectedMonth),
+          goalName: name.slice(0, 40),
+          goalTargetCents: cents,
+        },
+      },
     }));
     setGoalEdit(false);
     setGoalError("");
@@ -164,7 +386,7 @@ export function BudgetApp() {
   return (
     <main className="overflow-x-clip">
       <div className="mx-auto flex w-full max-w-5xl flex-col gap-5 px-4 py-6 sm:px-6 sm:py-10">
-        <header className="flex flex-col gap-4 border-b border-line pb-5 sm:flex-row sm:items-center sm:justify-between">
+        <header className="flex flex-col gap-4 border-b border-line pb-5 md:flex-row md:items-center md:justify-between">
           <div className="flex items-center gap-3">
             <svg viewBox="0 0 32 32" className="size-9 shrink-0" aria-hidden="true">
               <rect width="32" height="32" rx="8" className="fill-accent" />
@@ -181,8 +403,89 @@ export function BudgetApp() {
               <p className="mt-1 text-sm text-muted">Budget planner</p>
             </div>
           </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <div className="flex items-center">
+          <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center sm:justify-end">
+            <div className="grid w-full grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-2 sm:w-auto">
+            <label className="sr-only" htmlFor="currency-select">Ledger currency</label>
+            <select
+              id="currency-select"
+              className="field select min-w-0 w-full sm:min-w-36 sm:w-auto"
+              aria-label="Ledger currency"
+              value={data.currency}
+              onChange={(event) => changeCurrency(event.target.value as Currency)}
+            >
+              <option value="INR">INR · Indian rupee</option>
+              <option value="USD">USD · US dollar</option>
+            </select>
+            <details className="relative min-w-0">
+              <summary className="btn btn-quiet list-none whitespace-nowrap [&::-webkit-details-marker]:hidden" aria-label="More data actions">More</summary>
+              <div className="absolute right-0 top-full z-30 mt-2 flex min-w-52 flex-col rounded-md border border-line bg-surface p-1 shadow-lg" aria-label="More data actions">
+                <button
+                  type="button"
+                  className="btn h-auto min-h-11 justify-start px-3 text-left"
+                  onClick={(event) => {
+                    downloadText(`tally-${data.currency.toLowerCase()}-${month}.json`, makeBackup(data));
+                    event.currentTarget.closest("details")?.removeAttribute("open");
+                  }}
+                >
+                  Export backup
+                </button>
+                <button
+                  type="button"
+                  className="btn h-auto min-h-11 justify-start px-3 text-left"
+                  onClick={(event) => {
+                    downloadText(
+                      `tally-${data.currency.toLowerCase()}-transactions.csv`,
+                      transactionsToCsv(data.transactions, data.currency),
+                      "text/csv;charset=utf-8",
+                    );
+                    event.currentTarget.closest("details")?.removeAttribute("open");
+                  }}
+                >
+                  Export CSV
+                </button>
+                <button
+                  type="button"
+                  className="btn h-auto min-h-11 justify-start px-3 text-left"
+                  disabled={reportExporting}
+                  onClick={(event) => {
+                    void exportReport();
+                    event.currentTarget.closest("details")?.removeAttribute("open");
+                  }}
+                >
+                  {reportExporting ? "Preparing PDF…" : "Export monthly PDF"}
+                </button>
+                <button
+                  type="button"
+                  className="btn h-auto min-h-11 justify-start px-3 text-left"
+                  onClick={(event) => {
+                    setStatementImportOpen(true);
+                    event.currentTarget.closest("details")?.removeAttribute("open");
+                  }}
+                >
+                  Import statement
+                </button>
+                <label className="btn h-auto min-h-11 justify-start px-3 text-left">
+                  Restore backup
+                  <input
+                    className="sr-only"
+                    type="file"
+                    accept="application/json,.json"
+                    onChange={(event) => {
+                      void restoreBackup(event.target.files?.[0]);
+                      event.currentTarget.value = "";
+                      event.currentTarget.closest("details")?.removeAttribute("open");
+                    }}
+                  />
+                </label>
+              </div>
+            </details>
+            <button type="button" id="add-entry" className="btn btn-primary whitespace-nowrap" onClick={openCreate}>
+              <Plus className="size-4" aria-hidden="true" />
+              Add entry
+            </button>
+            </div>
+            <nav className="flex w-full items-center justify-between gap-2 sm:w-auto sm:justify-center" aria-label="Month navigation">
+              <div className="flex min-w-0 items-center">
               <button
                 type="button"
                 className="btn btn-quiet btn-icon"
@@ -191,7 +494,7 @@ export function BudgetApp() {
               >
                 <ChevronLeft className="size-5" aria-hidden="true" />
               </button>
-              <p className="min-w-40 text-center font-medium">{title}</p>
+              <p className="min-w-0 flex-1 px-1 text-center font-medium sm:min-w-40">{title}</p>
               <button
                 type="button"
                 className="btn btn-quiet btn-icon"
@@ -200,18 +503,22 @@ export function BudgetApp() {
               >
                 <ChevronRight className="size-5" aria-hidden="true" />
               </button>
-            </div>
+              </div>
             {month !== current ? (
-              <button type="button" className="btn btn-quiet" onClick={() => setMonth(current)}>
+              <button type="button" className="btn btn-quiet shrink-0" onClick={() => setMonth(current)}>
                 This month
               </button>
             ) : null}
-            <button type="button" id="add-entry" className="btn btn-primary" onClick={openCreate}>
-              <Plus className="size-4" aria-hidden="true" />
-              Add entry
-            </button>
+            </nav>
           </div>
         </header>
+
+        {persistenceError ? (
+          <p className="rounded-md border border-expense/30 bg-expense/5 px-4 py-3 text-sm" role="alert">
+            {persistenceError} Use Export backup to keep a copy.
+          </p>
+        ) : null}
+        {reportExportError ? <p className="rounded-md border border-expense/30 bg-expense/5 px-4 py-3 text-sm" role="alert">{reportExportError}</p> : null}
 
         <section className="panel" aria-labelledby="remaining-label">
           <div className="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
@@ -228,7 +535,7 @@ export function BudgetApp() {
                 aria-live="polite"
                 aria-atomic="true"
               >
-                {formatMoney(view.remaining)}
+                {formatMoney(view.remaining, data.currency)}
               </p>
               <p className="mt-2 text-sm text-muted">Income minus spending for {title}</p>
             </div>
@@ -236,13 +543,13 @@ export function BudgetApp() {
               <div className="pr-3">
                 <dt className="text-xs font-medium text-muted">Income</dt>
                 <dd className="mt-1 text-sm font-medium tabular-nums whitespace-nowrap sm:text-base">
-                  {formatMoney(view.income)}
+                  {formatMoney(view.income, data.currency)}
                 </dd>
               </div>
               <div className="px-3">
                 <dt className="text-xs font-medium text-muted">Spent</dt>
                 <dd className="mt-1 text-sm font-medium tabular-nums whitespace-nowrap sm:text-base">
-                  {formatMoney(view.spending)}
+                  {formatMoney(view.spending, data.currency)}
                 </dd>
               </div>
               <div className="pl-3">
@@ -360,7 +667,7 @@ export function BudgetApp() {
                                       tx.kind === "income" ? "amount-in" : "amount-out"
                                     }`}
                                   >
-                                    {formatSigned(tx.kind, tx.amountCents)}
+                                    {formatSigned(tx.kind, tx.amountCents, data.currency)}
                                   </p>
                                 </div>
                                 <p className="truncate text-sm text-muted">{meta}</p>
@@ -478,8 +785,8 @@ export function BudgetApp() {
                     type="button"
                     className="btn btn-quiet"
                     onClick={() => {
-                      setGoalName(data.goalName);
-                      setGoalTarget(centsToInput(data.goalTargetCents));
+                      setGoalName(settings.goalName);
+                      setGoalTarget(centsToInput(settings.goalTargetCents));
                       setGoalError("");
                       setGoalEdit(true);
                     }}
@@ -518,7 +825,7 @@ export function BudgetApp() {
                     </label>
                     <div className="relative">
                       <span className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-muted">
-                        $
+                        {data.currency === "INR" ? "₹" : "$"}
                       </span>
                       <input
                         id="goal-target"
@@ -548,7 +855,7 @@ export function BudgetApp() {
                 </form>
               ) : (
                 <div className="mt-4">
-                  <p className="font-medium">{data.goalName}</p>
+                  <p className="font-medium">{settings.goalName}</p>
                   <div
                     id="goal-progress"
                     className="track mt-3"
@@ -556,20 +863,20 @@ export function BudgetApp() {
                     aria-valuemin={0}
                     aria-valuemax={100}
                     aria-valuenow={percent}
-                    aria-label={`${data.goalName} progress`}
+                    aria-label={`${settings.goalName} progress`}
                   >
                     <span style={{ width: `${progress}%` }} />
                   </div>
                   <p className="mt-3 text-sm tabular-nums">
                     {view.remaining >= target ? (
                       <>
-                        <span className="font-medium">{formatMoney(target)}</span>
+                        <span className="font-medium">{formatMoney(target, data.currency)}</span>
                         <span className="text-muted"> target reached · {percent}%</span>
                       </>
                     ) : (
                       <>
-                        <span className="font-medium">{formatMoney(Math.max(view.remaining, 0))}</span>
-                        <span className="text-muted"> of {formatMoney(target)}</span>
+                        <span className="font-medium">{formatMoney(Math.max(view.remaining, 0), data.currency)}</span>
+                        <span className="text-muted"> of {formatMoney(target, data.currency)}</span>
                         <span className="text-muted"> · {percent}%</span>
                       </>
                     )}
@@ -577,6 +884,68 @@ export function BudgetApp() {
                   <p className="mt-1 text-sm text-muted">{goalDetail}</p>
                 </div>
               )}
+            </section>
+
+            <SpendingChatPanel data={data} month={month} />
+
+            <section className="panel" aria-labelledby="budgets-heading">
+              <h2 id="budgets-heading" className="text-lg font-medium">Monthly category budgets</h2>
+              <p className="mt-1 text-sm text-muted">Each month has its own limits. Leave an amount blank for no limit; a zero limit is not allowed.</p>
+              <ul className="mt-4 flex flex-col">
+                {EXPENSE_CATEGORIES.map((category) => {
+                  const spent = view.rows.find((row) => row.category === category)?.cents ?? 0;
+                  const limit = settings.categoryBudgets[category];
+                  const status = budgetStatus(spent, limit);
+                  const amount = budgetDrafts[category] ?? (limit ? centsToInput(limit) : "");
+                  const statusLabel = {
+                    "no-limit": "No limit",
+                    under: limit ? `${formatMoney(Math.max(limit - spent, 0), data.currency)} left` : "Under limit",
+                    near: "Near limit · 80%+",
+                    at: "At limit",
+                    over: `Over by ${formatMoney(spent - (limit ?? 0), data.currency)}`,
+                  }[status];
+                  return (
+                    <li key={category} className="border-t border-line py-3 first:border-t-0">
+                      <div className="flex flex-wrap items-start justify-between gap-2">
+                        <div>
+                          <p className="font-medium">{category}</p>
+                          <p className={`mt-0.5 text-sm ${status === "over" || status === "at" ? "amount-out" : "text-muted"}`}>
+                            {formatMoney(spent, data.currency)} spent · {statusLabel}
+                          </p>
+                        </div>
+                        <form
+                          className="flex max-w-full items-center gap-2"
+                          aria-label={`${category} monthly budget`}
+                          onSubmit={(event) => {
+                            event.preventDefault();
+                            saveCategoryBudget(category);
+                          }}
+                        >
+                          <label className="sr-only" htmlFor={`budget-${category}`}>Monthly limit for {category}</label>
+                          <div className="relative w-36">
+                            <span className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-muted">
+                              {data.currency === "INR" ? "₹" : "$"}
+                            </span>
+                            <input
+                              id={`budget-${category}`}
+                              className="field pl-7 tabular-nums"
+                              inputMode="decimal"
+                              placeholder="No limit"
+                              value={amount}
+                              onChange={(event) => {
+                                setBudgetDrafts((drafts) => ({ ...drafts, [category]: event.target.value }));
+                                setBudgetErrors((errors) => ({ ...errors, [category]: "" }));
+                              }}
+                            />
+                          </div>
+                          <button type="submit" className="btn btn-quiet">Save</button>
+                        </form>
+                      </div>
+                      {budgetErrors[category] ? <p className="mt-1 text-sm text-expense" role="alert">{budgetErrors[category]}</p> : null}
+                    </li>
+                  );
+                })}
+              </ul>
             </section>
 
             <section className="panel" aria-labelledby="chart-heading">
@@ -590,7 +959,7 @@ export function BudgetApp() {
                 <>
                   <div className="mt-4">
                     <Suspense fallback={<p className="text-sm text-muted">Loading chart…</p>}>
-                      <SpendChart rows={view.rows} />
+                      <SpendChart rows={view.rows} currency={data.currency} />
                     </Suspense>
                   </div>
                   <table className="mt-2 w-full text-sm">
@@ -607,7 +976,7 @@ export function BudgetApp() {
                           <td className="py-2">{row.category}</td>
                           <td className="py-2 text-right text-muted tabular-nums">{row.share}%</td>
                           <td className="py-2 text-right font-medium tabular-nums">
-                            {formatMoney(row.cents)}
+                            {formatMoney(row.cents, data.currency)}
                           </td>
                         </tr>
                       ))}
@@ -628,6 +997,7 @@ export function BudgetApp() {
           mode={editor.mode}
           initial={editor.mode === "edit" ? editor.tx : null}
           defaultDate={defaultDateForMonth(month)}
+          currency={data.currency}
           onClose={() => setEditor(null)}
           onSave={(draft) => {
             if (editor.mode === "create") {
@@ -657,6 +1027,15 @@ export function BudgetApp() {
             setMonth(draft.date.slice(0, 7));
             setEditor(null);
           }}
+        />
+      ) : null}
+      {data ? (
+        <StatementImportDialog
+          open={statementImportOpen}
+          currency={data.currency}
+          existing={data.transactions}
+          onOpenChange={setStatementImportOpen}
+          onConfirm={importStatement}
         />
       ) : null}
     </main>

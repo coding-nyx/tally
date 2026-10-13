@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Bar, BarChart, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { formatMoney, type SpendRow } from "@/lib/budget";
+import { formatMoney, type Currency, type SpendRow } from "@/lib/budget";
 
 function useReducedMotion(): boolean {
   const [reduce, setReduce] = useState(false);
@@ -17,9 +17,11 @@ function useReducedMotion(): boolean {
 function ChartTip({
   active,
   payload,
+  currency,
 }: {
   active?: boolean;
   payload?: Array<{ payload?: SpendRow }>;
+  currency: Currency;
 }) {
   const row = payload?.[0]?.payload;
   if (!active || !row) return null;
@@ -27,13 +29,13 @@ function ChartTip({
     <div className="rounded-sm border border-line bg-surface px-3 py-2 shadow-panel">
       <p className="text-sm font-medium">{row.category}</p>
       <p className="text-sm text-muted tabular-nums">
-        {formatMoney(row.cents)} · {row.share}%
+        {formatMoney(row.cents, currency)} · {row.share}%
       </p>
     </div>
   );
 }
 
-export function SpendChart({ rows }: { rows: SpendRow[] }) {
+export function SpendChart({ rows, currency }: { rows: SpendRow[]; currency: Currency }) {
   const reduce = useReducedMotion();
   const max = rows[0]?.cents ?? 1;
   const height = Math.max(160, rows.length * 32);
@@ -58,7 +60,7 @@ export function SpendChart({ rows }: { rows: SpendRow[] }) {
           />
           <Tooltip
             cursor={{ fill: "var(--color-track)" }}
-            content={<ChartTip />}
+            content={<ChartTip currency={currency} />}
             wrapperStyle={{ outline: "none" }}
           />
           <Bar dataKey="cents" barSize={12} radius={[0, 6, 6, 0]} isAnimationActive={!reduce}>
