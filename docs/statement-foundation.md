@@ -1,6 +1,6 @@
 # Phase B statement and legacy-migration foundation
 
-Status: **deployed and activated** after explicit approval of the activation proposal. The hub has migrations 0001–0004, Phase B enabled and **95 tools**. The source remains saved and uncommitted; deployment evidence is in [phase-b-deployment.md](phase-b-deployment.md). No real statements/browser records were uploaded, staged or migrated during this work.
+Status: statement support is implemented behind an explicit feature flag. The current catalog has 99 tools when enabled. See README.md and the UI/UX review for current scope and verification; historical counts below describe earlier milestones.
 
 ## Implemented
 

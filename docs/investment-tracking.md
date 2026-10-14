@@ -40,6 +40,6 @@ Evidence is retained locally under ignored `artifacts/investment-tracking/final/
 
 ## Rollout status and boundaries
 
-The deployed dashboard fix and its GitHub synchronization (`4c6ca23` on `feature/agent-tools`) are separate completed milestones. **The tracking extension is candidate source and is not deployed. Production still runs the earlier server-dashboard release.** The subsequent documentation/UX task authorizes source synchronization; see the resume checkpoint for its final status. Before rollout, take a protected backup, activate only the tested finance candidate image and verify the actual private URL/tool discovery. No database migration or network/access-policy change is needed.
+The tracking extension is merged into main and activated on the private deployment. The release required no database migration or network/access-policy change. Before any later rollout, back up the database, activate the tested finance image and verify the actual private URL and discovery. Exact release identifiers are retained in private operational evidence.
 
 Values are manually entered dated observations. Live quotes/NAV, broker/bank connections, orders/trades, SIP or RD auto-debits, reminders, investment cash-journal linkage, realised returns and tax calculations are outside this slice. No real financial records were imported or altered in these tests.

@@ -6,14 +6,9 @@ Financial data is read and written on the server. The current dashboard does not
 
 ## Release status
 
-| Surface                                                                          | Status                                                                           |
-| -------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
-| Shared dashboard, PostgreSQL accounts/journals and statement foundation          | Previously deployed; source synchronized at `4c6ca23`                            |
-| Account institution/last four, enhanced card bills/limits and manual investments | Implemented in this branch; candidate verification completed; not deployed       |
-| UX audit improvements and dated analysis screen                                  | See [UI/UX review](docs/ui-ux-review.md) for exact current verification          |
-| Main branch                                                                      | Separate from `feature/agent-tools`; an open PR does not mean merged or deployed |
+The account/card/loan tracking, manual investments, dated analysis and responsive navigation changes are merged into `main`. They have been activated and checked on the private deployment. Deployments remain operator-managed; pulling this source does not update an existing installation.
 
-The catalog has **99 tools** when statement support is enabled, or **83** without it. A deployed older release may still expose 95. Discover capabilities from the actual service before using tools. Repository code, remote Git state and the running release are separate states.
+The catalog has **99 tools** when statement support is enabled, or **83** without it. Discover capabilities from the actual service before using tools. Repository code, remote Git state and the running release are separate states.
 
 ## Features and where to find them
 
@@ -99,7 +94,7 @@ No secrets belong in source, `.env`, browser storage, URLs, screenshots or promp
 
 ### Development
 
-The owner has requested that local development/preview servers stay **off** during current work. The commands below document setup; they are not an instruction for an agent to start them automatically.
+Keep local development/preview servers off unless explicitly authorized by the operator. The commands below document setup; they are not an instruction for an agent to start them automatically.
 
 For an explicitly authorized synthetic demo, `npm run dev:agent-fixtures` starts loopback-only development with synthetic in-memory records and a local provider stub. It does not test durable PostgreSQL or real external AI. For a normal durable development instance, configure the shared service below, then use `npm run dev`. Running `npm run dev` without shared storage does **not** turn the dashboard into a browser-local app. Vite development reads direct process environment variables; the production launcher resolves the selected `*_FILE` secret variables.
 
@@ -174,7 +169,7 @@ git diff --check
 
 Browser QA must inspect real rendered pages, forms, previews, errors and desktop/tablet/mobile screenshots. Test both UI and actual SDK MCP calls against the compiled runtime and a disposable database; a passing schema test or HTTP 200 alone is insufficient. Record exact coverage and gaps in [UI/UX review](docs/ui-ux-review.md). A disabled provider is an expected state, not a tested AI response. Keep generated runtime files, screenshots, dumps and private QA evidence out of Git.
 
-To synchronize authorized changes, inspect `git status`, fetch the remote, review divergence, commit only reviewed source/public documentation and push the intended branch. Never reset local work or force-push. Update generated tool schemas when contracts change. Do not publish private deployment inventories, personal figures or secrets in commit/PR descriptions. A push does not deploy or merge; report all three states separately.
+To synchronize authorized changes, inspect `git status`, fetch the remote, review divergence, commit only reviewed source/public documentation and push the intended branch. Preserve local work. History rewriting requires explicit owner authorization and a private recovery backup. Update generated tool schemas when contracts change. Do not publish private deployment inventories, personal figures or secrets in commit/PR descriptions. A push does not deploy or merge; report all three states separately.
 
 ## Recovery
 

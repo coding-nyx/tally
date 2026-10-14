@@ -40,4 +40,4 @@ GRANT SELECT, INSERT ON tally_source_files, tally_statements,
 
 Keep runtime `NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS` and revoke public schema-creation permissions where appropriate for this dedicated database. No runtime DELETE/DDL grant is needed. Migration 0004 conditionally grants its append-only tables if `tally_runtime` already exists; otherwise grant them deliberately after creating the role. Verify with synthetic operations using the runtime connection, not only the migration connection.
 
-The historical `provision-database.py` script is tailored to the existing installation and older activation tooling. It is not a portable new-host installer and must not be run blindly from these instructions.
+The historical `provision-database.py` entry point is disabled. Use the role and migration steps above for a new installation. The Caddyfile is a private-ingress template: replace `finance.example.ts.net` with the authorized private hostname and review it separately; do not overwrite an existing gateway configuration. Image override templates require `TALLY_FINANCE_IMAGE` to identify the verified image.
