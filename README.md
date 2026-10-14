@@ -1,16 +1,42 @@
+<p align="center">
+  <img src="docs/assets/tally-overview.svg" alt="Tally — one private workspace for your finances, with a web dashboard and MCP tools" width="100%" />
+</p>
+
 # Tally
 
-A private, single-person finance workspace with a web dashboard and MCP tools backed by the same PostgreSQL ledger. It tracks monthly budgets, financial accounts, card and loan activity, statement evidence, and manually valued investments.
+**Your finances, in one private workspace.**
 
-Financial data is read and written on the server. The current dashboard does not maintain a browser-local ledger, seed sample records, or silently import old browser data. INR and USD have independent balances, settings, revisions and histories; there is no implicit currency conversion.
+[Features](#what-you-can-track) · [Setup](#setup) · [MCP connection](#mcp-connection) · [Architecture](#architecture) · [Contributing](#project-instructions) · [Coverage & limitations](docs/ui-ux-review.md)
 
-## Release status
+A self-hosted finance dashboard with MCP tools backed by the same PostgreSQL service. Track bank and cash accounts, credit cards, loans, monthly budgets and manually valued investments from the website or an MCP client.
 
-The account/card/loan tracking, manual investments, dated analysis and responsive navigation changes are merged into `main`. They have been activated and checked on the private deployment. Deployments remain operator-managed; pulling this source does not update an existing installation.
+| At a glance     |                                                         |
+| --------------- | ------------------------------------------------------- |
+| **Workspace**   | One person's shared finances                            |
+| **Storage**     | PostgreSQL is the source of truth                       |
+| **Access**      | Private tailnet mode, with no app login or token prompt |
+| **MCP catalog** | 99 tools with statements enabled; 83 without            |
 
-The catalog has **99 tools** when statement support is enabled, or **83** without it. Discover capabilities from the actual service before using tools. Repository code, remote Git state and the running release are separate states.
+INR and USD have independent balances, settings and histories. Financial records are loaded and saved on the server; the dashboard does not maintain a browser-local ledger or silently import old browser data.
 
-## Features and where to find them
+> [!NOTE]
+> The source is public. Your deployed application and financial data should remain behind private ingress. All permitted peers in shared tailnet mode have the same authority.
+
+## What you can track
+
+| Area                     | What it does                                                                           | Open in the app                |
+| ------------------------ | -------------------------------------------------------------------------------------- | ------------------------------ |
+| **Everyday budget**      | Income, expenses, categories, goals and monthly limits                                 | Dashboard                      |
+| **Accounts & debt**      | Bank/cash accounts, institution details, dated openings, transfers and loan repayments | Accounts & debt                |
+| **Credit cards**         | Recorded outstanding, limits, dated bills, minimums and payments                       | Accounts & debt → Credit cards |
+| **Investments**          | Mutual funds, gold, stocks and recurring deposits; manual valuation history            | Investments                    |
+| **Statements & imports** | Reviewed CSV/text-PDF staging, mapping, matching and reconciliation                    | Statements / Legacy imports    |
+| **Analysis & exports**   | Dated account reports, cash movement, CSV/PDF/JSON downloads                           | Analysis / More / Tools        |
+
+**Current status:** these features are merged into `main` and activated on the private deployment. Discover the actual service's capabilities before use; source updates, tool discovery and deployment are separate operations. Some advanced operations still use JSON rather than dedicated forms; see the [UI/UX review](docs/ui-ux-review.md).
+
+<details>
+<summary><strong>Detailed feature → UI → MCP coverage</strong></summary>
 
 | Feature                                                                          | Web interface                                                        | MCP/service support                                           |
 | -------------------------------------------------------------------------------- | -------------------------------------------------------------------- | ------------------------------------------------------------- |
@@ -31,9 +57,11 @@ The catalog has **99 tools** when statement support is enabled, or **83** withou
 | Approvals, consent, operations, audit and legacy undo                            | Reviews and Advanced tools; not every operation has a dedicated form | Scoped approval/receipt/audit/undo tools                      |
 | Optional spending chat                                                           | Spending chat                                                        | Context-bound external AI consent and request lifecycle       |
 
-Tool names above omit the `tally_` prefix for readability. See the [generated tool schemas](skills/tally/references/tools.json), [bundled operating skill](skills/tally/SKILL.md), and [UI/UX coverage review](docs/ui-ux-review.md), and [all-tool UI inventory](docs/tool-ui-coverage.md).
+Tool names above omit the `tally_` prefix for readability. See the [generated tool schemas](skills/tally/references/tools.json), [bundled operating skill](skills/tally/SKILL.md), [UI/UX coverage review](docs/ui-ux-review.md), and [all-tool UI inventory](docs/tool-ui-coverage.md).
 
-### Accounting and scope
+</details>
+
+## Accounting and scope
 
 - Account balances come from reviewed openings and balanced journals. Missing openings mean **unknown**, not zero.
 - Transfers, card repayments and loan principal are not counted again as spending. Borrowing is not income; recorded interest/fees are expenses.
@@ -43,7 +71,8 @@ Tool names above omit the `tally_` prefix for readability. See the [generated to
 - There is no bank/broker connection, automatic EMI/amortisation, tax/realised-return engine, investment cash posting, SIP/RD auto-debit, reminder worker, hosted HTTP MCP/OAuth or built-in tool-running agent.
 - Statement/migration review has functional foundations but remains an advanced interface. Scanned/encrypted PDFs and OCR are unsupported. Financial imports are never inferred from files or browser storage.
 
-## Application map
+<details>
+<summary><strong>Explore the application map</strong></summary>
 
 ```mermaid
 flowchart TD
@@ -61,6 +90,8 @@ flowchart TD
   Workspace --> Advanced[Reviews, tools, audit and exports]
 ```
 
+</details>
+
 ## Architecture
 
 ```mermaid
@@ -77,7 +108,9 @@ React 19, TypeScript, TanStack Start/Router, Tailwind and Recharts provide the U
 
 Private shared `tailnet` mode uses the existing trusted private ingress and one shared workspace principal, with **no application login or token prompt**. Every permitted peer has the same authority; this is not per-user or per-agent isolation. Financial writes keep frozen previews, revision/hash checks and durable idempotency, without an extra owner-approval click. Bearer mode retains its scoped owner approvals. External AI sharing still requires explicit consent in either mode.
 
-## Requirements and installation
+## Setup
+
+### 1. Install dependencies
 
 - Node.js **22.13 or newer** (deployment/CI target Node 22), npm 10+.
 - PostgreSQL 17 for durable shared operation; Docker/Compose for the documented self-hosted target.
@@ -92,13 +125,7 @@ npm run lint
 
 No secrets belong in source, `.env`, browser storage, URLs, screenshots or prompts. Supply runtime secrets from a protected process environment or selected `*_FILE` secret files.
 
-### Development
-
-Keep local development/preview servers off unless explicitly authorized by the operator. The commands below document setup; they are not an instruction for an agent to start them automatically.
-
-For an explicitly authorized synthetic demo, `npm run dev:agent-fixtures` starts loopback-only development with synthetic in-memory records and a local provider stub. It does not test durable PostgreSQL or real external AI. For a normal durable development instance, configure the shared service below, then use `npm run dev`. Running `npm run dev` without shared storage does **not** turn the dashboard into a browser-local app. Vite development reads direct process environment variables; the production launcher resolves the selected `*_FILE` secret variables.
-
-### Shared-service configuration
+### 2. Configure PostgreSQL and private access
 
 | Variable                             | Purpose                                                                       |
 | ------------------------------------ | ----------------------------------------------------------------------------- |
@@ -111,7 +138,7 @@ For an explicitly authorized synthetic demo, `npm run dev:agent-fixtures` starts
 | `TALLY_AGENT_GRANTS_JSON` / `_FILE`  | Scoped token verifiers in bearer mode; unnecessary for tailnet mode           |
 | `TALLY_STATEMENTS_ENABLED=true`      | Explicitly enable the statement/migration tools                               |
 
-Provision a new PostgreSQL database and roles deliberately; do not point setup/QA at an existing financial database. Using migration-role credentials supplied privately, apply the checksum-tracked `migrations/agent-tools/0001`–`0004` migrations:
+Provision a new PostgreSQL database and roles deliberately; do not point setup/QA at an existing financial database. Following the [database role setup](deploy/hub/README.md#runtime-role-on-a-new-database), and using migration-role credentials supplied privately, apply the checksum-tracked `migrations/agent-tools/0001`–`0004` migrations:
 
 ```sh
 TALLY_AGENT_ENABLED=true npm run agent:migrate
@@ -119,7 +146,7 @@ TALLY_AGENT_ENABLED=true npm run agent:migrate
 
 The connection must already be supplied through `TALLY_AGENT_DATABASE_URL` or its file variable. Switch to the restricted runtime role afterwards. See [deployment setup](deploy/hub/README.md); back up an existing database before release changes. Migrations are an operator action, not a browser request or build side effect.
 
-### Build and run
+### 3. Build and run
 
 ```sh
 npm run build        # default platform build
@@ -128,9 +155,32 @@ npm run build:hub    # standalone Node output, /finance/ base path
 
 The standalone build produces `.output/`. Run `node scripts/start-tally.mjs` from that runtime directory, or use the provided Dockerfile/Compose files. The runtime launcher resolves selected secret files; directly invoking the generated server entry bypasses that launcher. Production uses a loopback host binding behind existing private HTTPS ingress. Do not expose the app/database publicly or widen listeners to solve a connection problem.
 
-### MCP connection
+### Development and synthetic demos
 
-In an MCP client, set the command to the absolute path of your Node executable, arguments to `["--experimental-strip-types", "/absolute/path/to/tally/scripts/tally-mcp.ts"]`. Replace the example script path with this checkout’s absolute path; the absolute argument also works in clients without a working-directory setting. Use Node directly so npm banners do not enter the stdio protocol. Configure these environment variables in the client's protected configuration:
+Keep local development/preview servers off unless explicitly authorized by the operator. The commands below document setup; they are not an instruction for an agent to start them automatically.
+
+For an explicitly authorized synthetic demo, `npm run dev:agent-fixtures` starts loopback-only development with synthetic in-memory records and a local provider stub. It does not test durable PostgreSQL or real external AI. For a normal durable development instance, configure the shared service below, then use `npm run dev`. Running `npm run dev` without shared storage does **not** turn the dashboard into a browser-local app. Vite development reads direct process environment variables; the production launcher resolves the selected `*_FILE` secret variables.
+
+## MCP connection
+
+In an MCP client, set the command to the absolute path of your Node executable, arguments to `["--experimental-strip-types", "/absolute/path/to/tally/scripts/tally-mcp.ts"]`. Replace the example script path with this checkout’s absolute path; the absolute argument also works in clients without a working-directory setting. Use Node directly so npm banners do not enter the stdio protocol. For clients using an `mcpServers` configuration, the shape is:
+
+```json
+{
+  "mcpServers": {
+    "tally": {
+      "command": "/absolute/path/to/node",
+      "args": ["--experimental-strip-types", "/absolute/path/to/tally/scripts/tally-mcp.ts"],
+      "env": {
+        "TALLY_URL": "https://<your-host>.<your-tailnet>.ts.net/finance/",
+        "TALLY_AUTH_MODE": "tailnet"
+      }
+    }
+  }
+}
+```
+
+Other clients may expose separate command, arguments and environment fields. The connection environment is:
 
 ```text
 TALLY_URL=https://<your-host>.<your-tailnet>.ts.net/finance/
@@ -155,7 +205,7 @@ Useful entry points:
 - `migrations/agent-tools/`: persistent schema; never rewrite applied migrations.
 - `deploy/hub/`: portable private deployment files; keep live secrets/config outside Git.
 
-## Verification and remote synchronization
+## Verify, sync and deploy
 
 ```sh
 npm run typecheck
@@ -170,6 +220,8 @@ git diff --check
 Browser QA must inspect real rendered pages, forms, previews, errors and desktop/tablet/mobile screenshots. Test both UI and actual SDK MCP calls against the compiled runtime and a disposable database; a passing schema test or HTTP 200 alone is insufficient. Record exact coverage and gaps in [UI/UX review](docs/ui-ux-review.md). A disabled provider is an expected state, not a tested AI response. Keep generated runtime files, screenshots, dumps and private QA evidence out of Git.
 
 To synchronize authorized changes, inspect `git status`, fetch the remote, review divergence, commit only reviewed source/public documentation and push the intended branch. Preserve local work. History rewriting requires explicit owner authorization and a private recovery backup. Update generated tool schemas when contracts change. Do not publish private deployment inventories, personal figures or secrets in commit/PR descriptions. A push does not deploy or merge; report all three states separately.
+
+For an existing installation, follow the [release checklist](deploy/hub/README.md#existing-installation--release): take a protected database backup, build and test a candidate, activate only the finance image, then verify live UI and MCP discovery. Preserve the gateway, database, runtime secrets and private network configuration. Retain a working rollback image and backup before removing old releases or build cache.
 
 ## Recovery
 
