@@ -2,6 +2,8 @@ import type { BudgetData, Currency, TxKind, Transaction, MonthlySettings } from 
 import type { CsvTable, StatementMapping } from "../bank-statement.ts";
 import type { SpendingSummary } from "../ai/spending-chat.ts";
 import { EXPENSE_CATEGORIES, INCOME_CATEGORIES } from "../budget.ts";
+import type { StatementLedger, StatementChange } from "../statements.ts";
+import type { AccountingLedger, AccountingChange } from "../accounting.ts";
 
 export type Principal = {
   ownerId: string;
@@ -18,7 +20,13 @@ export type Category = {
   archived: boolean;
   builtIn: boolean;
 };
-export type Ledger = { revision: number; data: BudgetData; categories: Category[] };
+export type Ledger = {
+  revision: number;
+  data: BudgetData;
+  categories: Category[];
+  accounting?: AccountingLedger;
+  statements?: StatementLedger;
+};
 export type Plan = {
   id: string;
   actorId: string;
@@ -37,6 +45,8 @@ export type Plan = {
   providerIdentity?: string;
   importId?: string;
   receiptId?: string;
+  accountingChange?: AccountingChange;
+  statementChange?: StatementChange;
 };
 export type Approval = {
   id: string;

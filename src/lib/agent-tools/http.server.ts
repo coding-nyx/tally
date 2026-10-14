@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { catalog, currency } from "./catalog.ts";
+import { catalog, foundationCatalog, currency } from "./catalog.ts";
 import { AgentToolService, ToolError } from "./service.ts";
 import { authenticate } from "./auth.server.ts";
 import { configuredStore } from "./store.server.ts";
@@ -9,6 +9,12 @@ async function configuredService() {
     const { syntheticQaService } = await import("./fixtures.server.ts");
     service = await syntheticQaService();
   }
+  if (!process.env.TALLY_AGENT_DATABASE_URL?.trim() && !service)
+    throw new ToolError(
+      "storage_unconfigured",
+      "Tool access is enabled, but shared ledger storage is not configured.",
+      503,
+    );
   service ??= new AgentToolService(configuredStore(), process.env);
   return service;
 }
@@ -45,7 +51,6 @@ export async function handleAgentRequest(
   const json = (body: unknown, status = 200) => Response.json(body, { status, headers });
   try {
     const principal = authenticate(request, env);
-    const engine = suppliedService ?? (await configuredService());
     const url = new URL(request.url);
     const suffix = url.pathname
       .slice(url.pathname.indexOf("/api/agent") + 10)
@@ -53,8 +58,14 @@ export async function handleAgentRequest(
     if (!suffix && request.method === "GET") {
       return json({
         version: 2,
+        authMode: env.TALLY_AGENT_AUTH_MODE ?? "bearer",
+        storageConfigured: !!suppliedService || !!env.TALLY_AGENT_DATABASE_URL?.trim(),
         tools: Object.entries(catalog)
-          .filter(([, tool]) => principal.scopes.includes(tool.scope))
+          .filter(
+            ([name, tool]) =>
+              principal.scopes.includes(tool.scope) &&
+              (Object.hasOwn(foundationCatalog, name) || env.TALLY_STATEMENTS_ENABLED === "true"),
+          )
           .map(([name, tool]) => ({
             name,
             description: tool.description,
@@ -64,12 +75,24 @@ export async function handleAgentRequest(
           })),
       });
     }
+    const engine = suppliedService ?? (await configuredService());
     if (!suffix && request.method === "POST") {
       if (!request.headers.get("content-type")?.startsWith("application/json"))
         throw new ToolError("content_type", "Use application/json.", 415);
       let input: unknown;
       try {
-        input = JSON.parse((await readBounded(request, 16384)).toString("utf8"));
+        const body = await readBounded(
+          request,
+          env.TALLY_STATEMENTS_ENABLED === "true" ? 1048576 : 16384,
+        );
+        input = JSON.parse(body.toString("utf8"));
+        if (
+          body.length > 16384 &&
+          (!input ||
+            typeof input !== "object" ||
+            Object.hasOwn(foundationCatalog, (input as { tool?: string }).tool ?? ""))
+        )
+          throw new ToolError("too_large", "Legacy control requests remain limited to 16 KB.", 413);
       } catch (e) {
         if (e instanceof ToolError) throw e;
         throw new ToolError("invalid_json", "Invalid JSON request.");

@@ -15,10 +15,16 @@ export function agentBaseUrl(location: Pick<Location, "origin" | "pathname">) {
     `${location.origin}${path.endsWith("/") ? path : `${path}/`}`,
   ).toString();
 }
+export type TallyDiscovery = {
+  version: 2;
+  authMode: "tailnet" | "bearer";
+  storageConfigured: boolean;
+  tools: Array<{ name: string; effect: string; [key: string]: unknown }>;
+};
 export class TallyClient {
   private endpoint: string;
   private token: string;
-  constructor(endpoint: string, token: string) {
+  constructor(endpoint: string, token = "") {
     this.endpoint = endpoint;
     this.token = token;
   }
@@ -26,7 +32,11 @@ export class TallyClient {
     const response = await fetch(`${this.endpoint}${path}`, {
       ...init,
       redirect: "error",
-      headers: { ...init?.headers, authorization: `Bearer ${this.token}` },
+      headers: {
+        ...init?.headers,
+        "x-tally-request": "1",
+        ...(this.token ? { authorization: `Bearer ${this.token}` } : {}),
+      },
     });
     if (!response.ok) {
       const value = (await response.json().catch(() => ({}))) as {
@@ -40,6 +50,32 @@ export class TallyClient {
       );
     }
     return response;
+  }
+  async discover(signal?: AbortSignal): Promise<TallyDiscovery> {
+    const response = await this.request("", { signal });
+    const value = await response.json().catch(() => null);
+    if (
+      value?.version !== 2 ||
+      !["tailnet", "bearer"].includes(value.authMode) ||
+      typeof value.storageConfigured !== "boolean" ||
+      !Array.isArray(value.tools) ||
+      !value.tools.every(
+        (tool: TallyDiscovery["tools"][number] | null) =>
+          tool && typeof tool.name === "string" && typeof tool.effect === "string",
+      )
+    )
+      throw new TallyClientError(
+        "invalid_response",
+        "The Tally service returned invalid discovery data.",
+        502,
+      );
+    if (!value.storageConfigured)
+      throw new TallyClientError(
+        "storage_unconfigured",
+        "Tool access is enabled, but shared ledger storage is not configured.",
+        503,
+      );
+    return value;
   }
   async call(
     tool: string,

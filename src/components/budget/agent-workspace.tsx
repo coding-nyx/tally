@@ -2,14 +2,23 @@ import { useEffect, useRef, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { TallyClient, TallyClientError, agentBaseUrl } from "@/lib/agent-tools/client";
 import { formatMoney, type Currency } from "@/lib/budget";
+import { StatementWorkspace } from "./statement-workspace";
+import { AccountWorkspace } from "./account-workspace";
 
 type Row = Record<string, any>;
 /** Owner/agent UI uses exactly the same service as REST and MCP; no local replica writes. */
-export function AgentWorkspace() {
+export function AgentWorkspace({
+  initial = {},
+}: { initial?: { currency?: Currency; month?: string; section?: string } } = {}) {
   const [token, setToken] = useState("");
   const [client, setClient] = useState<TallyClient | null>(null);
-  const [currency, setCurrency] = useState<Currency>("INR");
-  const [month, setMonth] = useState(new Date().toISOString().slice(0, 7));
+  const [currency, setCurrency] = useState<Currency>(initial.currency ?? "INR");
+  const [month, setMonth] = useState(initial.month ?? new Date().toISOString().slice(0, 7));
+  useEffect(() => {
+    if (initial.currency) setCurrency(initial.currency);
+    if (initial.month) setMonth(initial.month);
+    if (initial.section) setTab(initial.section);
+  }, [initial.currency, initial.month, initial.section]);
   const [revision, setRevision] = useState(0);
   const [summary, setSummary] = useState<Row | null>(null);
   const [categories, setCategories] = useState<Row[]>([]);
@@ -17,7 +26,9 @@ export function AgentWorkspace() {
   const [cursor, setCursor] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
-  const [tab, setTab] = useState("ledger");
+  const [connecting, setConnecting] = useState(true);
+  const [needsCredential, setNeedsCredential] = useState(false);
+  const [tab, setTab] = useState(initial.section ?? "ledger");
   const [kind, setKind] = useState("expense");
   const [category, setCategory] = useState("Personal");
   const [amount, setAmount] = useState("");
@@ -43,7 +54,9 @@ export function AgentWorkspace() {
   const [question, setQuestion] = useState("");
   const [context, setContext] = useState<Row | null>(null);
   const [ai, setAi] = useState<Row | null>(null);
-  const [aiReady, setAiReady] = useState(false);
+  const [aiReady, setAiReady] = useState<boolean | null>(null);
+  const [aiStatusError, setAiStatusError] = useState("");
+  const connection = useRef<AbortController | null>(null);
   const generation = useRef(0);
   const abort = useRef<AbortController | null>(null);
   const retry = useRef<{
@@ -109,6 +122,33 @@ export function AgentWorkspace() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [client, currency, month]);
   useEffect(() => {
+    void connect();
+    return () => connection.current?.abort();
+    // Connection discovery is read-only and runs once per page visit, including reloads.
+  }, []);
+  useEffect(() => {
+    setAiReady(null);
+    setAiStatusError("");
+    if (!client) return;
+    if (!tools.some((tool) => tool.name === "tally_get_ai_status")) {
+      setAiReady(false);
+      return;
+    }
+    const controller = new AbortController();
+    const signal = AbortSignal.any([controller.signal, AbortSignal.timeout(20000)]);
+    // Optional provider readiness must not keep the ledger connection busy.
+    void client.call("tally_get_ai_status", {}, undefined, signal).then(
+      (status) => {
+        if (!controller.signal.aborted) setAiReady(status.configured === true);
+      },
+      () => {
+        if (!controller.signal.aborted)
+          setAiStatusError("AI availability could not be checked. Reconnect to retry.");
+      },
+    );
+    return () => controller.abort();
+  }, [client, tools]);
+  useEffect(() => {
     if (!client || !ai?.requestId || ai.status !== "pending") return;
     const timer = setInterval(() => {
       void client
@@ -168,21 +208,36 @@ export function AgentWorkspace() {
     if (!Number.isSafeInteger(value) || value <= 0) throw new Error("Enter a positive amount.");
     return value;
   }
-  async function connect() {
-    setBusy(true);
+  async function connect(accessToken = "") {
+    connection.current?.abort();
+    const controller = new AbortController();
+    connection.current = controller;
+    const signal = AbortSignal.any([controller.signal, AbortSignal.timeout(20000)]);
+    setConnecting(true);
     setError("");
     try {
-      const active = new TallyClient(agentBaseUrl(window.location), token);
-      const discovered = await (await active.request("")).json();
+      const active = new TallyClient(agentBaseUrl(window.location), accessToken);
+      const discovered = await active.discover(signal);
+      if (signal.aborted) return;
       setTools(discovered.tools);
       setClient(active);
       setToken("");
-      const status = await active.call("tally_get_ai_status", {});
-      setAiReady(status.configured);
+      setNeedsCredential(false);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Could not connect.");
+      if (controller.signal.aborted) return;
+      setNeedsCredential(e instanceof TallyClientError && e.code === "unauthorized");
+      setError(
+        signal.aborted
+          ? "Connection timed out. Check your private Tailscale connection and retry."
+          : e instanceof TallyClientError
+            ? e.message
+            : "Could not reach your private Tally server. Check your Tailscale connection and retry.",
+      );
     } finally {
-      setBusy(false);
+      if (connection.current === controller) {
+        setConnecting(false);
+        connection.current = null;
+      }
     }
   }
   async function upload(file: File | undefined, restore = false) {
@@ -318,30 +373,34 @@ export function AgentWorkspace() {
           <h1 className="text-2xl font-semibold">Shared workspace</h1>
           <p className="mt-3 text-muted">
             This workspace stores records on your private Tally server so the app and authorized
-            agents use the same ledger. Browser-local records stay on your device until you
-            explicitly import a backup.
+            agents use the same ledger. The dashboard and tool workspace read and update this same
+            ledger.
           </p>
           <p className="mt-3 text-sm text-muted">
-            Owner setup must enable storage and grant access first. Your credential stays in this
-            tab’s memory and is cleared on disconnect or reload.
+            Your private Tailscale connection opens this workspace automatically. Reviewed imports
+            and destructive changes still require an explicit review step.
           </p>
-          <label className="mt-5 block">
-            Access credential
-            <input
-              type="password"
-              autoComplete="off"
-              className={control}
-              value={token}
-              onChange={(e) => setToken(e.target.value)}
-            />
-          </label>
-          <button
-            className="btn btn-primary mt-4"
-            disabled={busy || !token}
-            onClick={() => void connect()}
-          >
-            Connect
-          </button>
+          {needsCredential && (
+            <label className="mt-3 block">
+              Access credential for this token-based deployment
+              <input
+                type="password"
+                autoComplete="off"
+                className={control}
+                value={token}
+                onChange={(e) => setToken(e.target.value)}
+              />
+            </label>
+          )}
+          {connecting ? (
+            <p role="status" className="mt-4 text-muted">
+              Connecting to your workspace…
+            </p>
+          ) : (
+            <button className="btn btn-primary mt-4" onClick={() => void connect(token)}>
+              {needsCredential ? "Connect" : "Retry connection"}
+            </button>
+          )}
           {error && (
             <p role="alert" className="mt-3 text-expense">
               {error}
@@ -379,6 +438,7 @@ export function AgentWorkspace() {
           <button
             className="btn btn-quiet"
             onClick={() => {
+              generation.current += 1;
               abort.current?.abort();
               setClient(null);
               setEntries([]);
@@ -399,7 +459,16 @@ export function AgentWorkspace() {
         </div>
       </header>
       <nav className="flex flex-wrap gap-2" aria-label="Workspace sections">
-        {["ledger", "categories", "imports", "approvals", "chat", "tools"].map((value) => (
+        {[
+          "accounts",
+          "statements",
+          "ledger",
+          "categories",
+          "imports",
+          "approvals",
+          "chat",
+          "tools",
+        ].map((value) => (
           <button
             className={`btn ${tab === value ? "btn-primary" : "btn-quiet"}`}
             key={value}
@@ -408,10 +477,39 @@ export function AgentWorkspace() {
               if (!retry.current) setError("");
             }}
           >
-            {value[0].toUpperCase() + value.slice(1)}
+            {value === "ledger"
+              ? "Legacy budget"
+              : value === "imports"
+                ? "Legacy imports"
+                : value[0].toUpperCase() + value.slice(1)}
           </button>
         ))}
       </nav>
+      <div hidden={tab !== "accounts"}>
+        <AccountWorkspace
+          key={currency}
+          client={client}
+          currency={currency}
+          month={month}
+          revision={revision}
+          categories={categories}
+          busy={busy}
+          canRead={allowed("tally_list_accounts")}
+          canWrite={allowed("tally_prepare_account") && allowed("tally_prepare_journal_event")}
+          run={run}
+        />
+      </div>
+      <div hidden={tab !== "statements"}>
+        <StatementWorkspace
+          key={currency}
+          client={client}
+          currency={currency}
+          revision={revision}
+          busy={busy}
+          enabled={allowed("tally_list_account_statements")}
+          run={run}
+        />
+      </div>
       {error && (
         <section role="alert" className="panel border-expense">
           <p className="text-expense">{error}</p>
@@ -436,6 +534,11 @@ export function AgentWorkspace() {
       )}
       {tab === "ledger" && (
         <>
+          <section className="panel text-sm text-muted">
+            These income/expense entries are unassigned legacy budget records. They do not include
+            account journals. Accounts shows recorded bank/cash balances and liabilities; migration
+            requires a separate review.
+          </section>
           <section className="grid gap-3 sm:grid-cols-3">
             {[
               ["Income", summary?.incomeMinor ?? 0],
@@ -868,7 +971,7 @@ export function AgentWorkspace() {
             />
           </label>
           <label className="block">
-            Restore a JSON backup from this browser’s ledger
+            Restore a Tally JSON backup
             <input
               className={control}
               disabled={busy}
@@ -1029,24 +1132,28 @@ export function AgentWorkspace() {
               </pre>
               {preview.planId && (
                 <>
-                  <button
-                    className="btn btn-quiet mt-3"
-                    disabled={busy}
-                    onClick={() => void requestApproval(preview)}
-                  >
-                    Request owner approval
-                  </button>
-                  <label className="mt-3 block">
-                    Approval id
-                    <input
-                      className={control}
-                      value={approvalId}
-                      onChange={(e) => setApprovalId(e.target.value)}
-                    />
-                  </label>
+                  {preview.approvalRequired !== false && (
+                    <>
+                      <button
+                        className="btn btn-quiet mt-3"
+                        disabled={busy}
+                        onClick={() => void requestApproval(preview)}
+                      >
+                        Request owner approval
+                      </button>
+                      <label className="mt-3 block">
+                        Approval id
+                        <input
+                          className={control}
+                          value={approvalId}
+                          onChange={(e) => setApprovalId(e.target.value)}
+                        />
+                      </label>
+                    </>
+                  )}
                   <button
                     className="btn btn-primary mt-3"
-                    disabled={busy || !approvalId}
+                    disabled={busy || (preview.approvalRequired !== false && !approvalId)}
                     onClick={() =>
                       void run(
                         preview.commitTool ??
@@ -1055,7 +1162,8 @@ export function AgentWorkspace() {
                           currency,
                           expectedRevision: preview.revision,
                           planId: preview.planId,
-                          approvalId,
+                          previewHash: preview.previewHash,
+                          ...(preview.approvalRequired !== false ? { approvalId } : {}),
                         },
                         () => {
                           setPreview(null);
@@ -1065,7 +1173,7 @@ export function AgentWorkspace() {
                       )
                     }
                   >
-                    Commit approved preview
+                    Commit displayed preview
                   </button>
                 </>
               )}
@@ -1077,8 +1185,9 @@ export function AgentWorkspace() {
         <section className="panel space-y-3">
           <h2 className="text-lg font-medium">Owner approvals</h2>
           <p className="text-muted">
-            Only an owner grant can approve changes. Review the exact currency, rows and revision
-            before deciding.
+            Review the exact currency, rows and revision before deciding. Bearer deployments require
+            an owner grant. Private shared Tailscale financial previews can be committed directly;
+            external AI requests still require consent.
           </p>
           <button className="btn btn-quiet" onClick={() => void reviewApprovals()}>
             Refresh approvals
@@ -1139,9 +1248,12 @@ export function AgentWorkspace() {
         <section className="panel space-y-3">
           <h2 className="text-lg font-medium">Spending chat</h2>
           <p className="text-muted">
-            {aiReady
-              ? "Review the monthly aggregates and approve external sharing before sending each question."
-              : "Provider unconfigured. No financial data is sent."}
+            {aiStatusError ||
+              (aiReady === null
+                ? "Checking provider availability…"
+                : aiReady
+                  ? "Review the monthly aggregates and approve external sharing before sending each question."
+                  : "Provider unconfigured. No financial data is sent.")}
           </p>
           <button
             className="btn btn-quiet"
@@ -1283,7 +1395,10 @@ export function AgentWorkspace() {
         </section>
       )}
       <p className="text-center text-xs text-muted">
-        Canonical server storage · <Link to="/">Browser-local workspace</Link>
+        Private server storage ·{" "}
+        <Link to="/" search={{ currency, month }}>
+          Dashboard
+        </Link>
       </p>
     </main>
   );

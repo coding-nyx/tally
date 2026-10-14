@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { AgentToolService, ToolError } from "./service.ts";
 import { MemoryWorkspaceStore, type Principal } from "./store.ts";
-import { catalog, scopes } from "./catalog.ts";
+import { catalog, foundationCatalog, legacyCatalog, scopes } from "./catalog.ts";
 const agent: Principal = {
   ownerId: "synthetic-owner",
   actorId: "synthetic-agent",
@@ -57,7 +57,9 @@ async function approve(s: AgentToolService, value: Record<string, any>) {
   return approval.approvalId;
 }
 test("catalog covers 62 real operations and rejects unauthenticated/overbroad arguments", async () => {
-  assert.equal(Object.keys(catalog).length, 62);
+  assert.equal(Object.keys(legacyCatalog).length, 62);
+  assert.equal(Object.keys(foundationCatalog).length, 79);
+  assert.equal(Object.keys(catalog).length, 95);
   const s = fixture();
   await assert.rejects(
     call(s, "get_ledger", { currency: "INR", authenticated: true }),
@@ -629,9 +631,9 @@ test("AI stays unconfigured, synthetic provider needs approval, bounded aggregat
   const unconfigured = fixture();
   await assert.rejects(call(unconfigured, "ask_spending_question", { ...args }), /not configured/);
 });
-test("every documented tool has an exercised implementation", () => {
+test("every legacy budget tool has an exercised implementation", () => {
   assert.deepEqual(
-    Object.keys(catalog).filter((t) => !exercised.has(t.slice(6))),
+    Object.keys(legacyCatalog).filter((t) => !exercised.has(t.slice(6))),
     [],
   );
   assert.ok(ToolError);

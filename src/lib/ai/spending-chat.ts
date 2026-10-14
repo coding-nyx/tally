@@ -93,7 +93,11 @@ export function buildSpendingSummary(data: BudgetData, month: string): SpendingS
       .map((row) => ({
         name: row.category,
         spentCents: row.cents,
-        budgetCents: settings.categoryBudgets[row.category] ?? null,
+        budgetCents:
+          Object.hasOwn(settings.categoryBudgets, row.category) &&
+          Number.isSafeInteger(settings.categoryBudgets[row.category])
+            ? settings.categoryBudgets[row.category]
+            : null,
       })),
   };
 }

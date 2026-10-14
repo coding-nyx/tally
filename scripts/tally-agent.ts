@@ -1,5 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { basename } from "node:path";
+import { foundationCatalog, catalog } from "../src/lib/agent-tools/catalog.ts";
 import { bridgeConfiguration } from "../src/lib/agent-tools/bridge.ts";
 const [command, ...args] = process.argv.slice(2);
 try {
@@ -33,8 +34,14 @@ try {
     };
   } else if (command === "call") {
     const body = args.join(" ");
-    JSON.parse(body);
-    if (Buffer.byteLength(body) > 16384) throw new Error("Control request exceeds 16 KB.");
+    const request = JSON.parse(body);
+    const expanded =
+      Object.hasOwn(catalog, request?.tool ?? "") &&
+      !Object.hasOwn(foundationCatalog, request?.tool ?? "");
+    if (Buffer.byteLength(body) > (expanded ? 1048576 : 16384))
+      throw new Error(
+        expanded ? "Statement control request exceeds 1 MB." : "Control request exceeds 16 KB.",
+      );
     init = { method: "POST", headers: { "content-type": "application/json" }, body };
   } else if (command !== "discover")
     throw new Error("Use discover, call <JSON>, or upload <currency> <explicit-file-path>.");
@@ -42,7 +49,11 @@ try {
     ...init,
     redirect: "error",
     signal: AbortSignal.timeout(20000),
-    headers: { ...init.headers, authorization: `Bearer ${config.token}` },
+    headers: {
+      ...init.headers,
+      "x-tally-request": "1",
+      ...(config.token ? { authorization: `Bearer ${config.token}` } : {}),
+    },
   });
   if (!response.ok) {
     const error = (await response.json()) as { error?: { code?: string; message?: string } };

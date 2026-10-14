@@ -112,7 +112,7 @@ test("private REST discovery, typed writes, limits and scope enforcement", async
   assert.equal((await handleAgentRequest(request(), service, {})).status, 503);
   const discovered = await handleAgentRequest(request(), service, env);
   assert.equal(discovered.status, 200);
-  assert.equal((await discovered.json()).tools.length, 62);
+  assert.equal((await discovered.json()).tools.length, 79);
   const created = await handleAgentRequest(
     request(
       "",

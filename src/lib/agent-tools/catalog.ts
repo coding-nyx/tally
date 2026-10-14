@@ -1,16 +1,27 @@
 import { z } from "zod";
+import { safeCategoryName } from "../budget.ts";
 
 export const currency = z.enum(["INR", "USD"]);
 export const month = z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/);
 export const date = z
   .string()
   .regex(/^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/)
-  .refine(
-    (v) => new Date(`${v}T00:00:00Z`).toISOString().slice(0, 10) === v,
-    "Invalid calendar date",
-  );
+  .refine((v) => {
+    const parsed = new Date(`${v}T00:00:00Z`);
+    return (
+      !v.startsWith("0000-") &&
+      Number.isFinite(parsed.getTime()) &&
+      parsed.toISOString().slice(0, 10) === v
+    );
+  }, "Invalid calendar date");
 export const amount = z.number().int().positive().max(1_000_000_000_000);
 export const id = z.string().min(1).max(128);
+export const categoryName = z
+  .string()
+  .trim()
+  .min(1)
+  .max(40)
+  .refine(safeCategoryName, "Choose a non-reserved category name");
 export const transaction = z.strictObject({
   kind: z.enum(["income", "expense"]),
   amountMinor: amount,
@@ -58,14 +69,23 @@ const paging = {
   limit: z.number().int().min(1).max(100).default(50),
   cursor: z.string().max(2048).optional(),
 };
-const planCommit = { ...c, ...revision, planId: id, approvalId: id };
+const planCommit = {
+  ...c,
+  ...revision,
+  planId: id,
+  previewHash: z
+    .string()
+    .regex(/^[a-f0-9]{64}$/)
+    .optional(),
+  approvalId: id.optional(),
+};
 export type ToolDefinition = {
   description: string;
   scope: string;
   effect: "read" | "write" | "prepare" | "external";
   schema: z.ZodObject;
 };
-export const catalog: Record<string, ToolDefinition> = {};
+export const catalog: Record<string, ToolDefinition> = Object.create(null);
 function tool(
   name: string,
   description: string,
@@ -73,6 +93,9 @@ function tool(
   effect: ToolDefinition["effect"],
   shape: z.ZodRawShape,
 ) {
+  if (shape === planCommit)
+    description +=
+      " When the preview returns approvalRequired=false, send planId, previewHash and expectedRevision directly; otherwise include an owner-approved approvalId.";
   catalog[`tally_${name}`] = { description, scope, effect, schema: z.strictObject(shape) };
 }
 tool(
@@ -114,7 +137,7 @@ tool(
     ...c,
     ...revision,
     kind: z.enum(["income", "expense"]),
-    name: z.string().trim().min(1).max(40),
+    name: categoryName,
   },
 );
 tool(
@@ -122,7 +145,7 @@ tool(
   "Rename a category and atomically update transaction and budget references.",
   "categories:write",
   "write",
-  { ...c, ...revision, categoryId: id, name: z.string().trim().min(1).max(40) },
+  { ...c, ...revision, categoryId: id, name: categoryName },
 );
 tool(
   "archive_category",
@@ -179,14 +202,14 @@ tool(
 );
 tool(
   "prepare_delete_transaction",
-  "Freeze a delete preview for trusted owner approval.",
+  "Freeze a delete preview; inspect it before committing.",
   "transactions:write",
   "prepare",
   { ...c, ...revision, transactionId: id },
 );
 tool(
   "delete_transaction",
-  "Commit an approved delete preview. An agent cannot approve its own preview.",
+  "Commit the exact frozen delete preview.",
   "transactions:write",
   "write",
   planCommit,
@@ -200,7 +223,7 @@ tool(
 );
 tool(
   "commit_batch_changes",
-  "Commit the exact approved batch atomically.",
+  "Commit the exact reviewed batch atomically.",
   "transactions:write",
   "write",
   planCommit,
@@ -254,7 +277,7 @@ tool(
 tool("get_budget_status", "Calculate budget and savings progress.", "summary:read", "read", cm);
 tool(
   "stage_statement",
-  "Stage an owned uploaded CSV or text PDF. Upload via the private file endpoint; never pass a server path or URL.",
+  "Stage a legacy budget-only CSV or text PDF; no account balance, counterpart matching or reconciliation effects. Upload via the private file endpoint; never pass a server path or URL.",
   "imports:write",
   "prepare",
   { ...c, fileId: id },
@@ -301,7 +324,7 @@ tool(
 );
 tool(
   "commit_import",
-  "Commit the exact approved import once; duplicates remain excluded.",
+  "Commit the exact reviewed import once; duplicates remain excluded.",
   "imports:write",
   "write",
   planCommit,
@@ -350,7 +373,7 @@ tool(
 );
 tool(
   "commit_restore",
-  "Commit the owner's approved restore; preserve the other ledger.",
+  "Commit the exact frozen restore; preserve the other ledger.",
   "restore:write",
   "write",
   planCommit,
@@ -385,7 +408,7 @@ tool(
 );
 tool(
   "clear_month",
-  "Clear only entries in the approved month preview.",
+  "Clear only entries in the reviewed month preview.",
   "transactions:write",
   "write",
   planCommit,
@@ -399,7 +422,7 @@ tool(
 );
 tool(
   "remove_sample_entries",
-  "Remove the approved sample entries only.",
+  "Remove the reviewed sample entries only.",
   "transactions:write",
   "write",
   planCommit,
@@ -484,8 +507,399 @@ tool(
 );
 tool(
   "commit_undo",
-  "Commit an approved compensating operation; original audit events remain intact.",
+  "Commit a reviewed compensating operation; original audit events remain intact.",
   "transactions:write",
+  "write",
+  planCommit,
+);
+
+// Snapshot of the original 62-operation surface for compatibility coverage.
+export const legacyCatalog = { ...catalog };
+
+const opening = z.strictObject({
+  date,
+  timing: z.enum(["start_of_day", "end_of_day"]),
+  balanceMinor: z.number().int().min(-1_000_000_000_000).max(1_000_000_000_000),
+});
+const allocations = z
+  .array(z.strictObject({ categoryId: id, amountMinor: amount }))
+  .min(1)
+  .max(50);
+const eventCommon = { date, note: z.string().max(80).default("") };
+const journalEvent = z.discriminatedUnion("kind", [
+  z.strictObject({ ...eventCommon, kind: z.literal("income"), accountId: id, allocations }),
+  z.strictObject({ ...eventCommon, kind: z.literal("expense"), accountId: id, allocations }),
+  z.strictObject({
+    ...eventCommon,
+    kind: z.literal("transfer"),
+    fromAccountId: id,
+    toAccountId: id,
+    amountMinor: amount,
+  }),
+  z.strictObject({
+    ...eventCommon,
+    kind: z.literal("card_payment"),
+    fromAccountId: id,
+    toAccountId: id,
+    amountMinor: amount,
+  }),
+  z.strictObject({
+    ...eventCommon,
+    kind: z.literal("loan_borrowing"),
+    assetAccountId: id,
+    loanAccountId: id,
+    amountMinor: amount,
+  }),
+  z.strictObject({
+    ...eventCommon,
+    kind: z.literal("loan_payment"),
+    assetAccountId: id,
+    loanAccountId: id,
+    principalMinor: z.number().int().min(0).max(1_000_000_000_000),
+    allocations: z
+      .array(
+        z.strictObject({
+          categoryId: id,
+          amountMinor: amount,
+          component: z.enum(["interest", "fee"]),
+        }),
+      )
+      .min(1)
+      .max(50)
+      .optional(),
+  }),
+  z.strictObject({
+    ...eventCommon,
+    kind: z.literal("refund"),
+    accountId: id,
+    originalEventId: id,
+    allocations,
+  }),
+]);
+tool(
+  "list_accounts",
+  "List bank, cash, card and loan accounts. Legacy budget entries are separate.",
+  "accounts:read",
+  "read",
+  c,
+);
+tool("get_account", "Read account metadata and reviewed opening cutoff.", "accounts:read", "read", {
+  ...c,
+  accountId: id,
+});
+tool(
+  "prepare_account",
+  "Prepare an account and optional reviewed opening balance; no postings until reviewed commit.",
+  "accounts:write",
+  "prepare",
+  {
+    ...c,
+    ...revision,
+    type: z.enum(["bank", "cash", "credit_card", "loan"]),
+    name: z.string().trim().min(1).max(80),
+    opening: opening.optional(),
+  },
+);
+tool(
+  "prepare_opening_balance",
+  "Prepare the first opening; overlapping historical movements require migration review.",
+  "accounts:write",
+  "prepare",
+  { ...c, ...revision, accountId: id, opening },
+);
+tool(
+  "prepare_account_update",
+  "Prepare account rename/archive/restore; type/currency and history stay immutable.",
+  "accounts:write",
+  "prepare",
+  {
+    ...c,
+    ...revision,
+    accountId: id,
+    name: z.string().trim().min(1).max(80).optional(),
+    archived: z.boolean().optional(),
+  },
+);
+tool(
+  "prepare_opening_correction",
+  "Prepare an explicit signed opening correction with a reason; never infer a plug from a closing-balance discrepancy.",
+  "accounts:write",
+  "prepare",
+  {
+    ...c,
+    ...revision,
+    accountId: id,
+    date,
+    deltaMinor: z
+      .number()
+      .int()
+      .min(-1_000_000_000_000)
+      .max(1_000_000_000_000)
+      .refine((v) => v !== 0),
+    note: z.string().trim().min(1).max(80),
+  },
+);
+tool(
+  "commit_account_change",
+  "Commit a reviewed account/opening change atomically with receipt and audit.",
+  "accounts:write",
+  "write",
+  planCommit,
+);
+tool(
+  "prepare_journal_event",
+  "Prepare balanced income, purchases, transfer/ATM, card settlement, loan principal/interest or refund; category allocations are separate from accounts.",
+  "journal:write",
+  "prepare",
+  { ...c, ...revision, event: journalEvent },
+);
+tool(
+  "prepare_journal_reversal",
+  "Prepare compensating postings; never delete or silently rewrite a posted journal.",
+  "journal:write",
+  "prepare",
+  { ...c, ...revision, eventId: id, date, note: z.string().min(1).max(80) },
+);
+tool(
+  "commit_journal_event",
+  "Commit the exact reviewed journal once; principal/transfers are not extra income or spending.",
+  "journal:write",
+  "write",
+  planCommit,
+);
+tool(
+  "list_journal_events",
+  "Read paginated account journals, separate from unassigned legacy transactions.",
+  "journal:read",
+  "read",
+  { ...c, ...paging, from: date.optional(), to: date.optional() },
+);
+tool(
+  "get_journal_event",
+  "Read a posted event and all balanced postings.",
+  "journal:read",
+  "read",
+  { ...c, eventId: id },
+);
+tool(
+  "get_account_balance",
+  "Read recorded balance at a date; unknown opening means null, not zero. Dated statement metadata is included when Phase B is enabled.",
+  "accounts:read",
+  "read",
+  { ...c, accountId: id, asOf: date },
+);
+tool(
+  "get_financial_position",
+  "Read scoped assets/liabilities; net position is unknown when openings are missing. No live bank data.",
+  "accounts:read",
+  "read",
+  { ...c, asOf: date },
+);
+tool(
+  "get_cash_flow",
+  "Calculate dated bank/cash movement; transfers cancel in aggregate and openings are excluded.",
+  "accounts:read",
+  "read",
+  { ...c, from: date, to: date },
+);
+tool(
+  "get_income_expense_report",
+  "Calculate dated journal income and net expense; legacy entries remain excluded until reviewed migration.",
+  "accounts:read",
+  "read",
+  { ...c, from: date, to: date },
+);
+tool(
+  "export_accounting_backup",
+  "Export account metadata and immutable journals; does not restore or migrate legacy budget entries.",
+  "exports:read",
+  "prepare",
+  c,
+);
+
+// Phase B is activated deliberately after migration 0004; legacy imports stay separate.
+export const foundationCatalog = { ...catalog };
+const signedMinor = z.number().int().min(-1_000_000_000_000).max(1_000_000_000_000);
+const reason = z.string().trim().min(1).max(500);
+const statementMetadata = {
+  periodFrom: date,
+  periodTo: date,
+  openingMinor: signedMinor.optional(),
+  closingMinor: signedMinor.optional(),
+  closingTiming: z.enum(["start_of_day", "end_of_day"]).default("end_of_day"),
+};
+const sourceIds = z.array(id).min(1).max(100);
+const sourceDecision = z.discriminatedUnion("action", [
+  z.strictObject({
+    action: z.literal("create"),
+    observationIds: sourceIds,
+    event: journalEvent,
+    reason,
+  }),
+  z.strictObject({ action: z.literal("link"), observationIds: sourceIds, eventId: id, reason }),
+  z.strictObject({ action: z.literal("exclude"), observationIds: sourceIds, reason }),
+]);
+tool(
+  "stage_account_statement",
+  "Retain selected CSV/text-PDF bytes and account/period metadata privately; stage only, no financial posting.",
+  "statements:write",
+  "write",
+  { ...c, ...revision, accountId: id, fileId: id, ...statementMetadata },
+);
+tool(
+  "revise_account_statement",
+  "Append an immutable mapping/correction revision. Original bytes and rows remain; linked source rows cannot be rewritten.",
+  "statements:write",
+  "write",
+  {
+    ...c,
+    ...revision,
+    statementId: id,
+    mapping: mapping.extend({ referenceColumn: z.number().int().nonnegative().nullable() }),
+    corrections: z
+      .array(
+        z.strictObject({
+          rowNumber: z.number().int().positive(),
+          values: z.array(z.string().max(10000)).max(100),
+        }),
+      )
+      .max(100)
+      .optional(),
+    metadata: z
+      .strictObject({
+        periodFrom: date.optional(),
+        periodTo: date.optional(),
+        openingMinor: signedMinor.optional(),
+        closingMinor: signedMinor.optional(),
+        closingTiming: z.enum(["start_of_day", "end_of_day"]).optional(),
+      })
+      .optional(),
+    reason,
+  },
+);
+tool(
+  "list_account_statements",
+  "Read persistent latest statement revisions; currency and account scoped.",
+  "statements:read",
+  "read",
+  { ...c, ...paging, accountId: id.optional() },
+);
+tool(
+  "get_account_statement",
+  "Read statement metadata, paginated original cells before mapping, or mapped source observations with reviewed decisions.",
+  "statements:read",
+  "read",
+  { ...c, ...paging, statementId: id },
+);
+tool(
+  "get_statement_source",
+  "Create a private expiring download for retained immutable source bytes.",
+  "statements:read",
+  "prepare",
+  { ...c, sourceFileId: id },
+);
+tool(
+  "get_statement_matches",
+  "Suggest provider/date/amount matches; similarities never merge or discard rows automatically.",
+  "statements:read",
+  "read",
+  { ...c, ...paging, statementId: id },
+);
+tool(
+  "prepare_statement_changes",
+  "Freeze explicit source classification/link/exclusion decisions and balanced events; select all rows of chosen statements. Multiple account counterparts share one journal.",
+  "statements:write",
+  "prepare",
+  {
+    ...c,
+    ...revision,
+    statementIds: z.array(id).min(1).max(10),
+    decisions: z.array(sourceDecision).max(1000),
+  },
+);
+tool(
+  "commit_statement_changes",
+  "Commit the exact reviewed statement/source/journal diff with revision, receipt and audit.",
+  "statements:write",
+  "write",
+  planCommit,
+);
+tool(
+  "prepare_statement_reconciliation",
+  "Freeze observed-versus-recorded closing and unresolved reasons; never creates a balancing plug.",
+  "statements:write",
+  "prepare",
+  { ...c, ...revision, statementId: id },
+);
+tool(
+  "commit_statement_reconciliation",
+  "Record the reviewed reconciliation snapshot; discrepancies remain visible and are recomputed on later reads.",
+  "statements:write",
+  "write",
+  planCommit,
+);
+tool(
+  "get_statement_coverage",
+  "Read missing periods, overlaps, current reconciliation and saved history for an explicit account/date scope.",
+  "statements:read",
+  "read",
+  { ...c, accountId: id, from: date, to: date },
+);
+tool(
+  "stage_legacy_migration",
+  "Snapshot shared legacy entries or an explicitly uploaded backup without posting; preserve originals/settings and keep unassigned evidence separate.",
+  "migration:write",
+  "write",
+  { ...c, ...revision, fileId: id.optional() },
+);
+tool(
+  "get_legacy_migration",
+  "Read original staged legacy entries/settings and decisions, including cutoff-excluded and unassigned history.",
+  "migration:read",
+  "read",
+  { ...c, ...paging, batchId: id },
+);
+tool(
+  "list_legacy_migrations",
+  "Read staged legacy migration metadata without silently migrating browser data.",
+  "migration:read",
+  "read",
+  { ...c, ...paging },
+);
+tool(
+  "prepare_legacy_migration",
+  "Freeze per-entry convert/cutoff/unassigned decisions; openings are explicit, dates and integer components must match. Shared converted entries leave legacy totals atomically.",
+  "migration:write",
+  "prepare",
+  {
+    ...c,
+    ...revision,
+    batchId: id,
+    decisions: z
+      .array(
+        z.discriminatedUnion("action", [
+          z.strictObject({
+            action: z.literal("convert"),
+            legacyIds: sourceIds,
+            event: journalEvent,
+            reason,
+          }),
+          z.strictObject({
+            action: z.literal("cutoff"),
+            legacyIds: sourceIds,
+            accountId: id,
+            reason,
+          }),
+          z.strictObject({ action: z.literal("unassigned"), legacyIds: sourceIds, reason }),
+        ]),
+      )
+      .max(1000),
+  },
+);
+tool(
+  "commit_legacy_migration",
+  "Commit reviewed legacy conversion once, retaining snapshot/decisions and settings with journal/receipt/audit.",
+  "migration:write",
   "write",
   planCommit,
 );

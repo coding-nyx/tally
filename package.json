@@ -18,14 +18,15 @@
     "preview:stop": "node scripts/preview.mjs stop",
     "typecheck": "tsc --noEmit",
     "check:auth": "node scripts/check-auth-invariant.mjs",
-    "test": "node --test 'scripts/**/*.test.mjs' && node --experimental-strip-types --test src/lib/budget.test.ts src/lib/bank-statement.test.ts src/lib/pdf-statement.test.ts src/lib/transaction-report-pdf.test.ts src/lib/ai/spending-chat.test.ts src/lib/ai/spending-chat.server.test.ts src/lib/agent-api/v1.test.ts src/lib/app-data/app-data.test.ts src/lib/app-data/readiness-schedule.test.ts src/lib/auth/gate-identity.test.ts src/lib/auth/sign-in-gate.test.ts src/lib/preview-path-prefix.test.ts src/lib/agent-tools/service.test.ts src/lib/agent-tools/http.test.ts src/lib/agent-tools/bridge.test.ts src/lib/agent-tools/pdf.server.test.ts",
+    "test": "node --test 'scripts/**/*.test.mjs' && node --experimental-strip-types --test src/lib/budget.test.ts src/lib/bank-statement.test.ts src/lib/pdf-statement.test.ts src/lib/transaction-report-pdf.test.ts src/lib/ai/spending-chat.test.ts src/lib/ai/spending-chat.server.test.ts src/lib/agent-api/v1.test.ts src/lib/app-data/app-data.test.ts src/lib/app-data/readiness-schedule.test.ts src/lib/auth/gate-identity.test.ts src/lib/auth/sign-in-gate.test.ts src/lib/preview-path-prefix.test.ts src/lib/agent-tools/service.test.ts src/lib/agent-tools/preview-policy.test.ts src/lib/agent-tools/http.test.ts src/lib/agent-tools/client.test.ts src/lib/agent-tools/dashboard.test.ts src/lib/agent-tools/bridge.test.ts src/lib/agent-tools/pdf.server.test.ts src/lib/agent-tools/statements.test.ts",
     "lint": "eslint .",
     "format": "prettier --write .",
     "agent:mcp": "node --experimental-strip-types scripts/tally-mcp.ts",
     "agent:cli": "node --experimental-strip-types scripts/tally-agent.ts",
     "agent:migrate": "node scripts/migrate-agent-tools.mjs",
     "agent:catalog": "node --experimental-strip-types scripts/tally-tool-catalog.ts",
-    "dev:agent-fixtures": "node --experimental-strip-types scripts/dev-agent-fixtures.ts"
+    "dev:agent-fixtures": "node --experimental-strip-types scripts/dev-agent-fixtures.ts",
+    "test:statements": "node --experimental-strip-types --test src/lib/agent-tools/statements.test.ts"
   },
   "dependencies": {
     "@electric-sql/pglite": "^0.5.4",

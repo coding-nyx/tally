@@ -15,10 +15,13 @@ export function bridgeConfiguration(env: Record<string, string | undefined>) {
     throw new Error(
       "TALLY_URL must be an HTTPS app URL or a loopback test URL, without credentials/query/fragment.",
     );
-  if (!env.TALLY_ACCESS_TOKEN || !/^[^\s]{32,512}$/.test(env.TALLY_ACCESS_TOKEN))
+  const tokenFree = env.TALLY_AUTH_MODE === "tailnet";
+  if (tokenFree && (base.protocol !== "https:" || !base.hostname.endsWith(".ts.net")))
+    throw new Error("Token-free mode requires the private Tailscale HTTPS app URL.");
+  if (!tokenFree && (!env.TALLY_ACCESS_TOKEN || !/^[^\s]{32,512}$/.test(env.TALLY_ACCESS_TOKEN)))
     throw new Error("A protected TALLY_ACCESS_TOKEN is required.");
   if (!base.pathname.endsWith("/")) base.pathname += "/";
-  return { base, token: env.TALLY_ACCESS_TOKEN };
+  return { base, token: tokenFree ? undefined : env.TALLY_ACCESS_TOKEN };
 }
 export async function createTallyMcpServer(env = process.env, fetcher: typeof fetch = fetch) {
   const config = bridgeConfiguration(env);
@@ -27,7 +30,11 @@ export async function createTallyMcpServer(env = process.env, fetcher: typeof fe
       ...init,
       redirect: "error",
       signal: init?.signal ?? AbortSignal.timeout(20000),
-      headers: { ...init?.headers, authorization: `Bearer ${config.token}` },
+      headers: {
+        ...init?.headers,
+        "x-tally-request": "1",
+        ...(config.token ? { authorization: `Bearer ${config.token}` } : {}),
+      },
     });
     if (!response.ok) {
       const body = (await response.json().catch(() => undefined)) as

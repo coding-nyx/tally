@@ -1,0 +1,5 @@
+services:
+  finance:
+    image: "${TALLY_FINANCE_IMAGE:?Choose the verified finance image}"
+    environment:
+      TALLY_STATEMENTS_ENABLED: "true"

@@ -1,0 +1,41 @@
+# Explicit persistent PostgreSQL activation. No host database port.
+services:
+  database:
+    image: postgres:17-bookworm
+    restart: unless-stopped
+    command:
+      ["postgres", "-c", "fsync=on", "-c", "synchronous_commit=on", "-c", "full_page_writes=on"]
+    mem_limit: 384m
+    cpus: 1
+    security_opt: ["no-new-privileges:true"]
+    environment:
+      POSTGRES_DB: tally
+      POSTGRES_USER: tally_admin
+      POSTGRES_PASSWORD_FILE: /run/secrets/tally_postgres_password
+      POSTGRES_INITDB_ARGS: "--data-checksums --auth-host=scram-sha-256"
+    secrets: [tally_postgres_password]
+    volumes:
+      ["${TALLY_DATABASE_ROOT:?Choose persistent database directory}/data:/var/lib/postgresql/data"]
+    networks: [ledger]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tally_admin -d tally"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    logging:
+      driver: json-file
+      options: { max-size: "5m", max-file: "2" }
+  finance:
+    depends_on:
+      database: { condition: service_healthy }
+    environment:
+      TALLY_AGENT_DATABASE_URL_FILE: /run/secrets/tally_database_url
+    secrets: [tally_database_url]
+    networks: [default, ledger]
+networks:
+  ledger: { internal: true }
+secrets:
+  tally_postgres_password:
+    file: "${TALLY_DATABASE_ROOT:?Choose persistent database directory}/secrets/admin-password"
+  tally_database_url:
+    file: "${TALLY_DATABASE_ROOT:?Choose persistent database directory}/secrets/runtime-url"

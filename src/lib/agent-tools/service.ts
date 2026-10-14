@@ -1,5 +1,12 @@
 import { createHash, randomUUID } from "node:crypto";
-import { catalog, requestSchema, transaction, amount, month as monthSchema } from "./catalog.ts";
+import {
+  catalog,
+  foundationCatalog,
+  requestSchema,
+  transaction,
+  amount,
+  month as monthSchema,
+} from "./catalog.ts";
 import type {
   WorkspaceStore,
   Workspace,
@@ -25,6 +32,42 @@ import {
 } from "../ai/spending-chat.ts";
 import { answerSpendingQuestion } from "../ai/spending-chat.server.ts";
 import { createTransactionReportPdf } from "../transaction-report-pdf.ts";
+import { safeCategoryName, categoryBudget } from "../budget.ts";
+import {
+  AccountingError,
+  emptyAccounting,
+  prepareAccount,
+  openingChange,
+  openingCorrection,
+  updateAccount,
+  prepareEvent,
+  prepareReversal,
+  applyAccountingChange,
+  accountBalance,
+  financialPosition,
+  incomeExpenseReport,
+  cashFlow,
+  type AccountingChange,
+} from "../accounting.ts";
+
+import {
+  emptyStatements,
+  durableSource,
+  stageStatement,
+  reviseStatement,
+  currentStatements,
+  observationsFor,
+  reviewedSource,
+  matchCandidates,
+  previewStatementChange,
+  reconciliation,
+  coverage,
+  stageMigration,
+  legacyDecisionFor,
+  previewMigration,
+  applyStatementChange,
+  type StatementChange,
+} from "../statements.ts";
 
 export class ToolError extends Error {
   code: string;
@@ -34,6 +77,14 @@ export class ToolError extends Error {
     this.name = "ToolError";
     this.code = code;
     this.status = status;
+  }
+}
+function accountingWork<T>(work: () => T): T {
+  try {
+    return work();
+  } catch (error) {
+    if (error instanceof AccountingError) throw new ToolError(error.code, error.message);
+    throw error;
   }
 }
 export type ToolResult =
@@ -66,17 +117,43 @@ function assertPrincipal(p: Principal, scope: string, currency?: Currency) {
     fail("forbidden", "This currency is outside the access grant.", 403);
 }
 function checkedCategory(ledger: Ledger, kind: string, name: string, allowArchived = false) {
+  if (!safeCategoryName(name)) fail("invalid_category", "Choose a non-reserved category name.");
   const cat = ledger.categories.find((c) => c.kind === kind && c.name === name);
   if (!cat || (cat.archived && !allowArchived))
     fail("invalid_category", "Choose an active category of the same transaction kind.");
   return cat;
 }
 function validateLedger(ledger: Ledger) {
+  for (const event of ledger.accounting?.events ?? [])
+    for (const posting of event.postings)
+      if (
+        posting.categoryId &&
+        !ledger.categories.some((c) => c.id === posting.categoryId && c.kind === posting.role)
+      )
+        fail(
+          "invalid_ledger",
+          "Category changes cannot remove or change a category used by posted journals.",
+        );
   if (ledger.data.transactions.length > 100_000)
     fail("quota", "The ledger is over the 100,000-entry limit.");
   const ids = new Set<string>();
   let total = 0;
   for (const tx of ledger.data.transactions) {
+    if (
+      ledger.statements?.legacyDecisions.some(
+        (d) =>
+          d.legacyId === tx.id &&
+          (d.disposition === "converted" ||
+            (d.disposition === "cutoff" &&
+              ledger.statements!.migrations.some(
+                (b) => b.id === d.batchId && b.origin === "shared",
+              ))),
+      )
+    )
+      fail(
+        "invalid_ledger",
+        "Legacy restore cannot reintroduce entries already converted or excluded by a reviewed cutoff. Use their retained migration history.",
+      );
     if (!tx.id || tx.id.length > 128 || ids.has(tx.id))
       fail("invalid_ledger", "Transaction ids must be unique.");
     ids.add(tx.id);
@@ -230,6 +307,13 @@ export class AgentToolService {
       );
     const request = parsed.data;
     const definition = catalog[request.tool] ?? fail("unknown_tool", "Unknown Tally tool.", 404);
+    const phaseB = !Object.hasOwn(foundationCatalog, request.tool);
+    if (phaseB && this.environment.TALLY_STATEMENTS_ENABLED !== "true")
+      fail(
+        "feature_disabled",
+        "Statements and legacy migration require deliberate Phase B activation after schema migration.",
+        503,
+      );
     const validation = definition.schema.safeParse(request.args);
     if (!validation.success)
       fail(
@@ -268,7 +352,12 @@ export class AgentToolService {
         requireRevision(ledger, args.expectedRevision);
       const before = ledger ? structuredClone(ledger) : undefined;
       let changed = false;
+      let accountingChanged = false;
       let result: Record<string, unknown>;
+      const sharedFinancialCommit =
+        this.environment.TALLY_AGENT_AUTH_MODE === "tailnet" &&
+        p.actorId === "tailnet-shared" &&
+        p.role === "owner";
       const plan = (
         operation: string,
         after: Ledger | undefined,
@@ -277,17 +366,27 @@ export class AgentToolService {
       ) => {
         if (Object.values(w.plans).filter((q) => q.status === "pending").length >= 30)
           fail("quota", "Cancel unused previews before preparing another.");
+        const frozenAfter = after ? structuredClone(after) : undefined;
+        const frozenBefore = before ? structuredClone(before) : undefined;
+        if (frozenAfter) {
+          delete frozenAfter.accounting;
+          delete frozenAfter.statements;
+        }
+        if (frozenBefore) {
+          delete frozenBefore.accounting;
+          delete frozenBefore.statements;
+        }
         const value: Plan = {
           id: randomUUID(),
           actorId: p.actorId,
           currency: args.currency,
           operation,
           revision: ledger!.revision,
-          hash: hash({ operation, after, review, ...extra }),
+          hash: hash({ operation, after: frozenAfter, review, ...extra }),
           expiresAt: Date.now() + 24 * 60 * 60 * 1000,
           status: "pending",
-          before,
-          after,
+          ...(extra.accountingChange || extra.statementChange ? {} : { before: frozenBefore }),
+          after: frozenAfter,
           review,
           ...extra,
         };
@@ -299,7 +398,7 @@ export class AgentToolService {
           revision: value.revision,
           expiresAt: value.expiresAt,
           review: value.review,
-          approvalRequired: true,
+          approvalRequired: operation === "ai-consent" || !sharedFinancialCommit,
         };
       };
       const commit = (operation: string) => {
@@ -308,21 +407,27 @@ export class AgentToolService {
           fail("invalid_plan", "This preview cannot be committed.", 409);
         requireRevision(ledger!, preview.revision);
         if (preview.requiredScope) assertPrincipal(p, preview.requiredScope, args.currency);
-        const approval = w.approvals[args.approvalId];
+        if (args.previewHash !== undefined && args.previewHash !== preview.hash)
+          fail("preview_mismatch", "Commit the exact frozen preview hash.", 409);
+        if (sharedFinancialCommit && args.previewHash !== preview.hash)
+          fail("preview_required", "Supply the frozen previewHash with this commit.", 409);
+        const approval = args.approvalId ? w.approvals[args.approvalId] : undefined;
         if (
-          !approval ||
-          approval.actorId !== p.actorId ||
-          approval.planId !== preview.id ||
-          approval.hash !== preview.hash ||
-          approval.expiresAt <= Date.now() ||
-          approval.status !== "approved"
+          !sharedFinancialCommit &&
+          (!approval ||
+            approval.actorId !== p.actorId ||
+            approval.planId !== preview.id ||
+            approval.hash !== preview.hash ||
+            approval.expiresAt <= Date.now() ||
+            approval.status !== "approved")
         )
           fail(
             "approval_required",
             "The owner must approve this exact preview through the trusted approval interface.",
             403,
           );
-        if (!preview.after) fail("invalid_plan", "This preview has no ledger change.");
+        if (!preview.after && !preview.accountingChange && !preview.statementChange)
+          fail("invalid_plan", "This preview has no ledger change.");
         if (preview.importId) {
           const draft = owned(w.imports[preview.importId], p, args.currency);
           if (draft.status !== "draft")
@@ -341,10 +446,38 @@ export class AgentToolService {
           );
           result = { backupFileId: file.id };
         } else result = {};
-        w.ledgers[args.currency as Currency] = structuredClone(preview.after);
+        if (preview.statementChange) {
+          if (preview.statementChange.events.length)
+            assertPrincipal(p, "journal:write", args.currency);
+          accountingWork(() =>
+            applyStatementChange(
+              (ledger!.statements ??= emptyStatements()),
+              (ledger!.accounting ??= emptyAccounting()),
+              ledger!.data,
+              preview.statementChange!,
+              ledger!.categories,
+            ),
+          );
+          accountingChanged = true;
+        } else if (preview.accountingChange) {
+          accountingWork(() =>
+            applyAccountingChange(
+              (ledger!.accounting ??= emptyAccounting()),
+              preview.accountingChange!,
+              ledger!.categories,
+            ),
+          );
+          accountingChanged = true;
+        } else
+          w.ledgers[args.currency as Currency] = {
+            ...structuredClone(preview.after!),
+            accounting: ledger!.accounting,
+            statements: ledger!.statements,
+          };
         preview.status = "committed";
         preview.receiptId = preview.id;
-        approval.status = "consumed";
+        if (approval?.status === "approved" && approval.planId === preview.id)
+          approval.status = "consumed";
         changed = true;
         return { ...result, operationId: preview.id, previewHash: preview.hash };
       };
@@ -354,16 +487,582 @@ export class AgentToolService {
         return value;
       };
       const summary = () => this.summary(ledger!, args.month);
+      const accounting = () => ledger!.accounting ?? emptyAccounting();
+      const accountingPlan = (
+        operation: string,
+        change: AccountingChange,
+        requiredScope: string,
+      ) => {
+        const after = structuredClone(accounting());
+        accountingWork(() => applyAccountingChange(after, change, ledger!.categories));
+        const asOf =
+          change.event?.date ??
+          change.account?.opening?.date ??
+          new Date().toISOString().slice(0, 10);
+        return plan(
+          operation,
+          undefined,
+          {
+            change,
+            affectedAccounts: after.accounts.filter(
+              (a) =>
+                a.id === change.account?.id ||
+                change.event?.postings.some((p) => p.accountId === a.id),
+            ),
+            positionBefore: accountingWork(() =>
+              financialPosition(accounting(), args.currency, asOf),
+            ),
+            positionAfter: accountingWork(() => financialPosition(after, args.currency, asOf)),
+            legacyEntriesExcluded: true,
+          },
+          { accountingChange: change, requiredScope },
+        );
+      };
+      const evidence = () => ledger!.statements ?? emptyStatements();
+      const sourceMetadata = (accountId: string, asOf: string) => {
+        if (this.environment.TALLY_STATEMENTS_ENABLED !== "true") return {};
+        const latest = currentStatements(evidence())
+          .filter((s) => s.accountId === accountId && s.periodTo <= asOf)
+          .sort((a, b) => b.periodTo.localeCompare(a.periodTo))[0];
+        return {
+          statementCoverage: latest ? "uploaded_periods_only" : "missing",
+          lastStatementDate: latest?.periodTo ?? null,
+          statementId: latest?.id ?? null,
+          reconciliation: latest
+            ? accountingWork(() =>
+                reconciliation(evidence(), accounting(), latest.id, ledger!.revision),
+              ).status
+            : "missing",
+          freshness: "Recorded journals plus dated uploaded evidence; no live bank connection.",
+        };
+      };
+      const evidencePlan = (
+        operation: string,
+        change: StatementChange,
+        additional: Record<string, unknown> = {},
+      ) => {
+        if (change.events.length) assertPrincipal(p, "journal:write", args.currency);
+        const after = structuredClone(accounting());
+        const afterSources = structuredClone(evidence());
+        const afterData = structuredClone(ledger!.data);
+        accountingWork(() =>
+          applyStatementChange(afterSources, after, afterData, change, ledger!.categories),
+        );
+        const asOf =
+          (additional.snapshot as { asOf?: string } | undefined)?.asOf ??
+          change.events
+            .map((e) => e.date)
+            .sort()
+            .at(-1) ??
+          new Date().toISOString().slice(0, 10);
+        const sourceRows = change.decisions.map((d) => {
+          const observation = evidence().observations.find((o) => o.id === d.observationId)!;
+          const statement = evidence().statements.find((s) => s.id === observation.statementId)!;
+          return {
+            observationId: observation.id,
+            statementId: statement.id,
+            accountId: observation.accountId,
+            sourceFileId: statement.sourceFileId,
+            rowNumber: observation.rowNumber,
+            date: observation.date ?? null,
+            movementMinor: observation.movementMinor ?? null,
+            description: observation.description,
+            providerReference: observation.providerReference ?? null,
+            signature: observation.signature,
+            error: observation.error ?? null,
+            decision: d,
+          };
+        });
+        const legacyRows = change.legacyDecisions.map((d) => ({
+          original: evidence()
+            .migrations.find((b) => b.id === d.batchId)!
+            .snapshot.transactions.find((t) => t.id === d.legacyId),
+          decision: d,
+        }));
+        return plan(
+          operation,
+          undefined,
+          {
+            ...additional,
+            change,
+            sourceRows,
+            legacyRows,
+            positionBefore: financialPosition(accounting(), args.currency, asOf),
+            positionAfter: financialPosition(after, args.currency, asOf),
+            originalEvidencePreserved: true,
+          },
+          { statementChange: change, requiredScope: definition.scope },
+        );
+      };
       switch (request.tool.slice(6)) {
+        case "stage_account_statement": {
+          const file = owned(w.files[args.fileId], p, args.currency);
+          const bytes = Buffer.from(file.bytes, "base64");
+          let table;
+          let warnings: string[] = [];
+          if (file.mime === "text/csv") table = parseStatementCsv(bytes.toString("utf8"));
+          else if (file.mime === "application/pdf") {
+            const { extractServerPdf } = await import("./pdf.server.ts");
+            const extracted = await extractServerPdf(bytes);
+            table = extracted.table;
+            warnings = extracted.warnings;
+          } else fail("unsupported_file", "Choose CSV or selectable-text PDF.");
+          const sources = (ledger!.statements ??= emptyStatements());
+          const source = accountingWork(() => durableSource(sources, args.currency, file));
+          const statement = accountingWork(() =>
+            stageStatement(sources, accounting(), args.currency, source, table, args),
+          );
+          changed = true;
+          accountingChanged = true;
+          result = {
+            statementId: statement.id,
+            sourceFileId: source.id,
+            sha256: source.sha256,
+            headers: statement.table.headers,
+            rowCount: statement.table.rows.length,
+            parser: statement.parser,
+            warnings,
+            financialPostings: 0,
+          };
+          break;
+        }
+        case "revise_account_statement": {
+          const statement = accountingWork(() =>
+            reviseStatement((ledger!.statements ??= emptyStatements()), accounting(), args),
+          );
+          changed = true;
+          accountingChanged = true;
+          result = {
+            statementId: statement.id,
+            previousId: statement.previousId,
+            rows: observationsFor(evidence(), statement.id).length,
+            reviewRequired: true,
+          };
+          break;
+        }
+        case "list_account_statements":
+          result = {
+            ...paginate(
+              currentStatements(evidence())
+                .filter((s) => !args.accountId || s.accountId === args.accountId)
+                .map(({ table, ...s }) => ({
+                  ...s,
+                  headers: table.headers,
+                  rowCount: table.rows.length,
+                })),
+              args,
+              {
+                actor: p.actorId,
+                currency: args.currency,
+                accountId: args.accountId,
+                revision: ledger!.revision,
+              },
+            ),
+            revision: ledger!.revision,
+          };
+          break;
+        case "get_account_statement": {
+          const statement =
+            evidence().statements.find((s) => s.id === args.statementId) ??
+            fail("not_found", "Statement not found.", 404);
+          const { table, ...metadata } = statement;
+          const observations = accountingWork(() => observationsFor(evidence(), statement.id));
+          result = {
+            statement: { ...metadata, headers: table.headers, rowCount: table.rows.length },
+            sourceMode: statement.mapping ? "observations" : "raw",
+            ...paginate<Record<string, unknown>>(
+              statement.mapping
+                ? observations.map((o) => ({
+                    ...o,
+                    decision: reviewedSource(evidence(), o) ?? null,
+                  }))
+                : table.rows.map((row) => ({ ...row, unmapped: true })),
+              args,
+              { statementId: statement.id, revision: ledger!.revision, actor: p.actorId },
+            ),
+            revision: ledger!.revision,
+          };
+          break;
+        }
+        case "get_statement_source": {
+          assertPrincipal(p, "files:read", args.currency);
+          const source =
+            evidence().files.find((f) => f.id === args.sourceFileId) ??
+            fail("not_found", "Source file not found.", 404);
+          result = {
+            ...this.fileResult(
+              this.makeFile(
+                w,
+                p,
+                args.currency,
+                source.name,
+                source.mime,
+                Buffer.from(source.bytes, "base64"),
+              ),
+            ),
+            sha256: source.sha256,
+          };
+          break;
+        }
+        case "get_statement_matches":
+          assertPrincipal(p, "journal:read", args.currency);
+          result = {
+            ...paginate(
+              accountingWork(() => matchCandidates(evidence(), accounting(), args.statementId)),
+              args,
+              { statementId: args.statementId, revision: ledger!.revision, actor: p.actorId },
+            ),
+            revision: ledger!.revision,
+          };
+          break;
+        case "prepare_statement_changes":
+          result = evidencePlan(
+            "statement-changes",
+            accountingWork(() =>
+              previewStatementChange(
+                evidence(),
+                accounting(),
+                args.currency,
+                args,
+                ledger!.categories,
+                p.actorId,
+              ),
+            ),
+            { statementIds: args.statementIds },
+          );
+          break;
+        case "commit_statement_changes":
+          result = commit("statement-changes");
+          break;
+        case "prepare_statement_reconciliation": {
+          const snapshot = accountingWork(() =>
+            reconciliation(evidence(), accounting(), args.statementId, ledger!.revision),
+          );
+          result = evidencePlan(
+            "statement-reconciliation",
+            {
+              events: [],
+              decisions: [],
+              reconciliations: [snapshot],
+              legacyDecisions: [],
+              removeLegacyIds: [],
+            },
+            { snapshot, noBalancingEntry: true },
+          );
+          break;
+        }
+        case "commit_statement_reconciliation":
+          result = commit("statement-reconciliation");
+          break;
+        case "get_statement_coverage":
+          result = {
+            ...accountingWork(() =>
+              coverage(
+                evidence(),
+                accounting(),
+                args.accountId,
+                args.from,
+                args.to,
+                ledger!.revision,
+              ),
+            ),
+            history: evidence().reconciliations.filter((r) => r.accountId === args.accountId),
+          };
+          break;
+        case "stage_legacy_migration": {
+          assertPrincipal(p, "transactions:read", args.currency);
+          let snapshot = ledger!.data;
+          let sourceFileId: string | undefined;
+          const sources = (ledger!.statements ??= emptyStatements());
+          if (args.fileId) {
+            const file = owned(w.files[args.fileId], p, args.currency);
+            let backup: any;
+            try {
+              backup = JSON.parse(Buffer.from(file.bytes, "base64").toString("utf8"));
+            } catch {
+              fail("invalid_backup", "Choose a valid JSON backup.");
+            }
+            if (
+              !["tally-budget-backup/v2", "tally-agent-backup/v3"].includes(backup.format) ||
+              backup.currency !== args.currency
+            )
+              fail("invalid_backup", "Choose a supported backup for this currency.");
+            snapshot = backup.ledger;
+            // Preserve category/settings metadata as source evidence. Missing custom categories
+            // must be deliberately created before their rows can be converted.
+            if (
+              !snapshot ||
+              snapshot.currency !== args.currency ||
+              !Array.isArray(snapshot.transactions) ||
+              typeof snapshot.settingsByMonth !== "object" ||
+              !snapshot.settingsByMonth ||
+              typeof snapshot.sample !== "boolean"
+            )
+              fail("invalid_backup", "Malformed legacy ledger.");
+            for (const row of snapshot.transactions) {
+              if (
+                !row ||
+                typeof row !== "object" ||
+                !transaction.safeParse(publicTxInput(row)).success
+              )
+                fail("invalid_backup", "Invalid legacy transaction fields.");
+              if (
+                typeof row.id !== "string" ||
+                !row.id ||
+                row.id.length > 128 ||
+                !Number.isSafeInteger(row.createdAt) ||
+                row.createdAt < 0 ||
+                typeof row.sample !== "boolean"
+              )
+                fail("invalid_backup", "Invalid legacy entry metadata.");
+            }
+            sourceFileId = accountingWork(() => durableSource(sources, args.currency, file)).id;
+          }
+          const batch = accountingWork(() =>
+            stageMigration(
+              sources,
+              args.currency,
+              snapshot,
+              args.fileId ? "uploaded" : "shared",
+              sourceFileId,
+            ),
+          );
+          changed = true;
+          accountingChanged = true;
+          result = {
+            batchId: batch.id,
+            sha256: batch.sha256,
+            origin: batch.origin,
+            entryCount: batch.snapshot.transactions.length,
+            financialPostings: 0,
+            originalSettingsPreserved: true,
+          };
+          break;
+        }
+        case "get_legacy_migration": {
+          const batch =
+            evidence().migrations.find((b) => b.id === args.batchId) ??
+            fail("not_found", "Migration batch not found.", 404);
+          result = {
+            batchId: batch.id,
+            sha256: batch.sha256,
+            origin: batch.origin,
+            sourceFileId: batch.sourceFileId ?? null,
+            settingsByMonth: batch.snapshot.settingsByMonth,
+            ...paginate(
+              batch.snapshot.transactions.map((t) => ({
+                original: publicTx(t),
+                decision: legacyDecisionFor(evidence(), batch.id, t.id) ?? null,
+              })),
+              args,
+              { batchId: batch.id, revision: ledger!.revision, actor: p.actorId },
+            ),
+            revision: ledger!.revision,
+          };
+          break;
+        }
+        case "list_legacy_migrations":
+          result = {
+            ...paginate(
+              evidence().migrations.map(({ snapshot, ...batch }) => ({
+                ...batch,
+                entryCount: snapshot.transactions.length,
+                decided: snapshot.transactions.filter((t) =>
+                  legacyDecisionFor(evidence(), batch.id, t.id),
+                ).length,
+              })),
+              args,
+              { revision: ledger!.revision, actor: p.actorId },
+            ),
+            revision: ledger!.revision,
+          };
+          break;
+        case "prepare_legacy_migration":
+          result = evidencePlan(
+            "legacy-migration",
+            accountingWork(() =>
+              previewMigration(
+                evidence(),
+                accounting(),
+                ledger!.data,
+                args.currency,
+                args,
+                ledger!.categories,
+                p.actorId,
+              ),
+            ),
+            { batchId: args.batchId, settingsRetained: true },
+          );
+          break;
+        case "commit_legacy_migration":
+          result = commit("legacy-migration");
+          break;
+        case "list_accounts":
+          result = {
+            accounts: accounting().accounts,
+            revision: ledger!.revision,
+            legacyEntriesUnassigned: ledger!.data.transactions.length,
+          };
+          break;
+        case "get_account":
+          result = {
+            account:
+              accounting().accounts.find((a) => a.id === args.accountId) ??
+              fail("not_found", "Account not found.", 404),
+            revision: ledger!.revision,
+          };
+          break;
+        case "prepare_account":
+          result = accountingPlan(
+            "accounting-account",
+            accountingWork(() => prepareAccount(accounting(), args.currency, args, p.actorId)),
+            "accounts:write",
+          );
+          break;
+        case "prepare_opening_balance":
+          result = accountingPlan(
+            "accounting-account",
+            accountingWork(() =>
+              openingChange(accounting(), args.accountId, args.opening, p.actorId),
+            ),
+            "accounts:write",
+          );
+          break;
+        case "prepare_account_update": {
+          if (args.name === undefined && args.archived === undefined)
+            fail("invalid_args", "Supply a name or archive status.");
+          result = accountingPlan(
+            "accounting-account",
+            accountingWork(() => updateAccount(accounting(), args)),
+            "accounts:write",
+          );
+          break;
+        }
+        case "prepare_opening_correction":
+          result = accountingPlan(
+            "accounting-account",
+            accountingWork(() => openingCorrection(accounting(), args, p.actorId)),
+            "accounts:write",
+          );
+          break;
+        case "commit_account_change":
+          result = commit("accounting-account");
+          break;
+        case "prepare_journal_event":
+          result = accountingPlan(
+            "accounting-journal",
+            accountingWork(() =>
+              prepareEvent(accounting(), args.currency, args, ledger!.categories, p.actorId),
+            ),
+            "journal:write",
+          );
+          break;
+        case "prepare_journal_reversal":
+          result = accountingPlan(
+            "accounting-journal",
+            accountingWork(() => prepareReversal(accounting(), args, p.actorId)),
+            "journal:write",
+          );
+          break;
+        case "commit_journal_event":
+          result = commit("accounting-journal");
+          break;
+        case "get_account_balance":
+          result = {
+            ...accountingWork(() => accountBalance(accounting(), args.accountId, args.asOf)),
+            ...sourceMetadata(args.accountId, args.asOf),
+            revision: ledger!.revision,
+          };
+          break;
+        case "get_financial_position": {
+          const position = accountingWork(() =>
+            financialPosition(accounting(), args.currency, args.asOf),
+          );
+          result = {
+            ...position,
+            accounts: position.accounts.map((row) => ({
+              ...row,
+              ...sourceMetadata(row.account.id, args.asOf),
+            })),
+            revision: ledger!.revision,
+          };
+          break;
+        }
+        case "get_cash_flow":
+          result = {
+            ...accountingWork(() => cashFlow(accounting(), args.currency, args.from, args.to)),
+            revision: ledger!.revision,
+          };
+          break;
+        case "get_income_expense_report":
+          result = {
+            ...accountingWork(() =>
+              incomeExpenseReport(accounting(), args.currency, args.from, args.to),
+            ),
+            revision: ledger!.revision,
+          };
+          break;
+        case "list_journal_events": {
+          if (args.from && args.to && args.from > args.to)
+            fail("invalid_args", "Report dates are reversed.");
+          result = paginate(
+            accounting().events.filter(
+              (e) => (!args.from || e.date >= args.from) && (!args.to || e.date <= args.to),
+            ),
+            args,
+            { currency: args.currency, revision: ledger!.revision, from: args.from, to: args.to },
+          );
+          break;
+        }
+        case "get_journal_event":
+          result = {
+            event:
+              accounting().events.find((e) => e.id === args.eventId) ??
+              fail("not_found", "Journal not found.", 404),
+            revision: ledger!.revision,
+          };
+          break;
+        case "export_accounting_backup":
+          result = this.fileResult(
+            this.makeFile(
+              w,
+              p,
+              args.currency,
+              `tally-${args.currency}-accounting.json`,
+              "application/json",
+              Buffer.from(
+                JSON.stringify({
+                  format: "tally-accounting-backup/v1",
+                  currency: args.currency,
+                  revision: ledger!.revision,
+                  accounting: accounting(),
+                  categories: ledger!.categories,
+                  statements: evidence(),
+                }),
+              ),
+            ),
+          );
+          break;
         case "get_capabilities":
           result = {
             version: 2,
             tools: Object.entries(catalog)
-              .filter(([, t]) => p.scopes.includes(t.scope))
+              .filter(
+                ([name, t]) =>
+                  p.scopes.includes(t.scope) &&
+                  (Object.hasOwn(foundationCatalog, name) ||
+                    this.environment.TALLY_STATEMENTS_ENABLED === "true"),
+              )
               .map(([name, t]) => ({ name, scope: t.scope, effect: t.effect })),
             currencies: p.currencies,
+            financialApprovalRequired: !sharedFinancialCommit,
+            financialCommitRequiresPreviewHash: sharedFinancialCommit,
+            externalAiConsentRequired: true,
             limits: {
               controlBytes: 16384,
+              statementControlBytes:
+                this.environment.TALLY_STATEMENTS_ENABLED === "true" ? 1048576 : 0,
+              accountStatementRows: 1000,
               fileBytes: 10485760,
               statementRows: 20000,
               batchChanges: 100,
@@ -375,7 +1074,12 @@ export class AgentToolService {
           };
           break;
         case "get_service_status":
-          result = { state: "ready", persistence: "canonical", version: 2 };
+          result = {
+            state: "ready",
+            persistence: "canonical",
+            version: 2,
+            statementsEnabled: this.environment.TALLY_STATEMENTS_ENABLED === "true",
+          };
           break;
         case "list_ledgers":
           result = {
@@ -553,7 +1257,10 @@ export class AgentToolService {
           result = {
             category: args.category,
             limitMinor:
-              settingsForMonth(ledger!.data, args.month).categoryBudgets[args.category] ?? null,
+              categoryBudget(
+                settingsForMonth(ledger!.data, args.month).categoryBudgets,
+                args.category,
+              ) ?? null,
             revision: ledger!.revision,
           };
           break;
@@ -573,7 +1280,7 @@ export class AgentToolService {
           changed = true;
           result = {
             category: args.category,
-            limitMinor: s.categoryBudgets[args.category] ?? null,
+            limitMinor: categoryBudget(s.categoryBudgets, args.category) ?? null,
           };
           break;
         }
@@ -602,7 +1309,10 @@ export class AgentToolService {
                       t.date.startsWith(args.month),
                   )
                   .reduce((s, t) => s + t.amountCents, 0);
-                const limit = settingsForMonth(ledger!.data, args.month).categoryBudgets[c.name];
+                const limit = categoryBudget(
+                  settingsForMonth(ledger!.data, args.month).categoryBudgets,
+                  c.name,
+                );
                 return {
                   category: c.name,
                   spentMinor: spent,
@@ -813,6 +1523,7 @@ export class AgentToolService {
                 typeof c.name !== "string" ||
                 !c.name.trim() ||
                 c.name.length > 40 ||
+                !safeCategoryName(c.name) ||
                 names.has(c.name.toLocaleLowerCase("en-US")) ||
                 !["income", "expense"].includes(c.kind) ||
                 typeof c.archived !== "boolean" ||
@@ -1174,7 +1885,7 @@ export class AgentToolService {
           requiredScope: w.plans[operationId]?.requiredScope ?? definition.scope,
           committedAt: Date.now(),
           result: structuredClone(result),
-          ...(changed
+          ...(changed && !accountingChanged
             ? {
                 undo: this.undoDelta(before!, w.ledgers[args.currency as Currency]),
                 afterHash: hash(w.ledgers[args.currency as Currency]),
@@ -1269,7 +1980,8 @@ export class AgentToolService {
               (t) => t.kind === "expense" && t.category === c.name && t.date.startsWith(month),
             )
             .reduce((sum, t) => sum + t.amountCents, 0),
-          budgetMinor: settingsForMonth(ledger.data, month).categoryBudgets[c.name] ?? null,
+          budgetMinor:
+            categoryBudget(settingsForMonth(ledger.data, month).categoryBudgets, c.name) ?? null,
         })),
     };
   }
@@ -1454,6 +2166,8 @@ export class AgentToolService {
         approval.expiresAt <= Date.now()
       )
         fail("not_found", "Approval preview not found or expired.", 404);
+      if (plan.accountingChange || plan.statementChange)
+        return { items: [plan.review], nextCursor: null, total: 1, previewHash: plan.hash };
       if (!plan.after) return { items: [], nextCursor: null, total: 0, previewHash: plan.hash };
       const prior = new Map(plan.before?.data.transactions.map((t) => [t.id, t]) ?? []);
       const next = new Map(plan.after?.data.transactions.map((t) => [t.id, t]) ?? []);

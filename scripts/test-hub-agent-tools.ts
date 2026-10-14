@@ -4,7 +4,7 @@ import { randomUUID } from "node:crypto";
 import { Client } from "@modelcontextprotocol/client";
 import { StdioClientTransport } from "@modelcontextprotocol/client/stdio";
 import { PDFDocument, StandardFonts } from "pdf-lib";
-import { catalog } from "../src/lib/agent-tools/catalog.ts";
+import { catalog, legacyCatalog } from "../src/lib/agent-tools/catalog.ts";
 import {
   SYNTHETIC_AGENT_TOKEN,
   SYNTHETIC_OWNER_TOKEN,
@@ -129,7 +129,7 @@ const transaction = {
 try {
   await client.connect(transport);
   const list = await client.listTools();
-  assert.equal(list.tools.length, 62);
+  assert.equal(list.tools.length, Object.keys(catalog).length);
   const skill = await readFile("skills/tally/SKILL.md", "utf8");
   assert.match(skill, /name: tally/);
   assert.match(skill, /same idempotency key/);
@@ -343,7 +343,7 @@ try {
   await call("list_audit_events", c);
   assert.equal((await call("get_ledger", { currency: "USD" })).revision, 0);
   assert.deepEqual(
-    Object.keys(catalog).filter((name) => !seen.has(name)),
+    Object.keys(legacyCatalog).filter((name) => !seen.has(name)),
     [],
   );
   await client.close();
@@ -361,7 +361,7 @@ try {
         stderr: "pipe",
       }),
     );
-    assert.equal((await modern.listTools()).tools.length, 62);
+    assert.equal((await modern.listTools()).tools.length, Object.keys(catalog).length);
     const result = await modern.callTool({
       name: "tally_get_ledger",
       arguments: { currency: "INR" },
@@ -375,6 +375,8 @@ try {
       {
         passed: true,
         exercisedOperations: seen.size,
+        discoveredOperations: Object.keys(catalog).length,
+        coverage: "legacy budget operations; account/journal mutation verification is deferred",
         protocols: ["legacy-2025", "2026-07-28"],
         expectedBlockedCases: failures,
         skillCatalogMatches: true,

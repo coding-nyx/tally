@@ -28,6 +28,54 @@ function requestOrigin(request: Request, env: Record<string, string | undefined>
   if (proto !== canonical.protocol.slice(0, -1) || host !== canonical.host) return actual;
   return canonical.origin;
 }
+function tailnetMode(env: Record<string, string | undefined>) {
+  return env.TALLY_AGENT_AUTH_MODE === "tailnet";
+}
+function authenticateTailnet(request: Request, env: Record<string, string | undefined>): Principal {
+  const socket = (request as Request & { ip?: unknown }).ip;
+  const ip = typeof socket === "string" ? socket.replace(/^::ffff:/, "") : "";
+  const canonical = new URL(env.TALLY_AGENT_PUBLIC_ORIGIN!);
+  // Serve overwrites XFF with the actual tailnet source. Caddy then appends
+  // its accepted loopback peer. Neither a client identity header nor a prefix
+  // in an arbitrary forwarded chain establishes trust.
+  const chain = (request.headers.get("x-forwarded-for") ?? "").split(",").map((s) => s.trim());
+  const peer = chain[0];
+  const tailnetAddress =
+    isIP(peer) === 4
+      ? peer.split(".")[0] === "100" &&
+        Number(peer.split(".")[1]) >= 64 &&
+        Number(peer.split(".")[1]) <= 127
+      : isIP(peer) === 6 && peer.toLowerCase().startsWith("fd7a:115c:a1e0:");
+  if (
+    !trustedProxyAddresses(env).includes(ip) ||
+    chain.length !== 2 ||
+    !["127.0.0.1", "::1"].includes(chain[1]) ||
+    !tailnetAddress ||
+    request.headers.has("tailscale-funnel-request") ||
+    request.headers.get("x-forwarded-host") !== canonical.host ||
+    request.headers.get("x-forwarded-proto") !== "https"
+  )
+    throw new ToolError("private_route_required", "Use the private Tailscale Serve URL.", 403);
+  if (
+    request.headers.get("sec-fetch-site") === "cross-site" ||
+    (!["GET", "HEAD"].includes(request.method) && request.headers.get("x-tally-request") !== "1")
+  )
+    throw new ToolError(
+      "invalid_origin",
+      "Use the Tally app or tool client for this request.",
+      403,
+    );
+  // The user selected unrestricted shared access within this private route.
+  // This is one shared principal, not independent authenticated agent identities.
+  return {
+    ownerId: env.TALLY_AGENT_WORKSPACE_ID!,
+    actorId: "tailnet-shared",
+    role: "owner",
+    currencies: ["INR", "USD"],
+    scopes: [...scopes],
+    expiresAt: Number.MAX_SAFE_INTEGER,
+  };
+}
 const grantSchema = z
   .strictObject({
     tokenSha256: z.string().regex(/^[a-f0-9]{64}$/),
@@ -51,9 +99,8 @@ const grantSchema = z
 export function agentConfigurationReady(env: Record<string, string | undefined> = process.env) {
   if (
     env.TALLY_AGENT_ENABLED !== "true" ||
-    !env.TALLY_AGENT_DATABASE_URL?.trim() ||
     !env.TALLY_AGENT_PUBLIC_ORIGIN ||
-    !env.TALLY_AGENT_GRANTS_JSON
+    (!tailnetMode(env) && (!env.TALLY_AGENT_DATABASE_URL?.trim() || !env.TALLY_AGENT_GRANTS_JSON))
   )
     return false;
   try {
@@ -70,11 +117,19 @@ export function agentConfigurationReady(env: Record<string, string | undefined> 
         ))
     )
       return false;
+    if (tailnetMode(env))
+      return (
+        origin.protocol === "https:" &&
+        origin.hostname.endsWith(".ts.net") &&
+        trustedProxyAddresses(env).length > 0 &&
+        /^[a-zA-Z0-9_-]{1,128}$/.test(env.TALLY_AGENT_WORKSPACE_ID ?? "")
+      );
+    if (env.TALLY_AGENT_AUTH_MODE && env.TALLY_AGENT_AUTH_MODE !== "bearer") return false;
     const grants = z
       .array(grantSchema)
       .min(1)
       .max(100)
-      .parse(JSON.parse(env.TALLY_AGENT_GRANTS_JSON));
+      .parse(JSON.parse(env.TALLY_AGENT_GRANTS_JSON!));
     return (
       new Set(grants.map((g) => g.actorId)).size === grants.length &&
       new Set(grants.map((g) => g.tokenSha256)).size === grants.length
@@ -95,6 +150,7 @@ export function authenticate(
     (request.headers.has("origin") && request.headers.get("origin") !== canonical)
   )
     throw new ToolError("invalid_origin", "This request origin is not allowed.", 403);
+  if (tailnetMode(env)) return authenticateTailnet(request, env);
   const header = request.headers.get("authorization") ?? "";
   if (!/^Bearer [^\s]{32,512}$/.test(header))
     throw new ToolError("unauthorized", "Provide a valid scoped access grant.", 401);
