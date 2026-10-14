@@ -1,6 +1,7 @@
+import { ReviewDetails } from "./review-details";
 import { useEffect, useRef, useState } from "react";
 import { TallyClient } from "@/lib/agent-tools/client";
-import { formatMoney, type Currency } from "@/lib/budget";
+import { formatMoney, monthKey, defaultDateForMonth, type Currency } from "@/lib/budget";
 type Row = Record<string, any>;
 type Props = {
   client: TallyClient;
@@ -25,8 +26,8 @@ export function StatementWorkspace({ client, currency, revision, busy, enabled, 
     [statements, setStatements] = useState<Row[]>([]),
     [batches, setBatches] = useState<Row[]>([]);
   const [accountId, setAccountId] = useState(""),
-    [from, setFrom] = useState(new Date().toISOString().slice(0, 7) + "-01"),
-    [to, setTo] = useState(new Date().toISOString().slice(0, 10)),
+    [from, setFrom] = useState(monthKey(new Date()) + "-01"),
+    [to, setTo] = useState(defaultDateForMonth(monthKey(new Date()))),
     [closing, setClosing] = useState(""),
     [timing, setTiming] = useState("end_of_day");
   const [selected, setSelected] = useState(""),
@@ -324,6 +325,7 @@ export function StatementWorkspace({ client, currency, revision, busy, enabled, 
           <label>
             Account
             <select
+              aria-label="Statement account"
               className="field w-full"
               value={accountId}
               onChange={(e) => setAccountId(e.target.value)}
@@ -368,6 +370,7 @@ export function StatementWorkspace({ client, currency, revision, busy, enabled, 
           <label>
             Closing cutoff
             <select
+              aria-label="Closing cutoff"
               className="field w-full"
               value={timing}
               onChange={(e) => setTiming(e.target.value)}
@@ -428,6 +431,7 @@ export function StatementWorkspace({ client, currency, revision, busy, enabled, 
             <label className="block">
               Explicit column mapping (zero-based indices)
               <textarea
+                aria-label="Explicit column mapping"
                 className="field mt-1 min-h-40 w-full font-mono text-xs"
                 value={mapping}
                 onChange={(e) => setMapping(e.target.value)}
@@ -554,6 +558,7 @@ export function StatementWorkspace({ client, currency, revision, busy, enabled, 
             <label className="block">
               Reviewed decisions
               <textarea
+                aria-label="Reviewed decisions"
                 className="field mt-1 min-h-32 w-full font-mono text-xs"
                 value={decisions}
                 onChange={(e) => setDecisions(e.target.value)}
@@ -673,6 +678,7 @@ export function StatementWorkspace({ client, currency, revision, busy, enabled, 
           />
         </label>
         <select
+          aria-label="Legacy migration batch"
           className="field w-full"
           value={batchId}
           disabled={locked}
@@ -758,9 +764,7 @@ export function StatementWorkspace({ client, currency, revision, busy, enabled, 
           <p className="text-sm">
             {currency} · revision {preview.revision} · exact plan {preview.planId}
           </p>
-          <pre className="max-h-96 overflow-auto whitespace-pre-wrap break-words text-xs">
-            {JSON.stringify(preview.review, null, 2)}
-          </pre>
+          <ReviewDetails value={preview.review} currency={currency} />
           {preview.revision !== revision && (
             <p className="text-expense">
               The ledger changed. Cancel this plan and prepare a fresh preview.

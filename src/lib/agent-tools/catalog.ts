@@ -587,6 +587,18 @@ tool("get_account", "Read account metadata and reviewed opening cutoff.", "accou
   ...c,
   accountId: id,
 });
+const cardBill = z
+  .strictObject({
+    statementDate: date,
+    dueDate: date,
+    totalDueMinor: z.number().int().min(0).max(1_000_000_000_000),
+    minimumDueMinor: z.number().int().min(0).max(1_000_000_000_000),
+  })
+  .refine(
+    (v) => v.dueDate >= v.statementDate && v.minimumDueMinor <= v.totalDueMinor,
+    "Check bill dates and minimum due",
+  );
+const cardTerms = z.strictObject({ creditLimitMinor: amount });
 tool(
   "prepare_account",
   "Prepare an account and optional reviewed opening balance; no postings until reviewed commit.",
@@ -598,6 +610,12 @@ tool(
     type: z.enum(["bank", "cash", "credit_card", "loan"]),
     name: z.string().trim().min(1).max(80),
     opening: opening.optional(),
+    institution: z.string().trim().max(80).optional(),
+    lastFour: z
+      .string()
+      .regex(/^\d{4}$/)
+      .optional(),
+    cardTerms: cardTerms.optional(),
   },
 );
 tool(
@@ -618,6 +636,13 @@ tool(
     accountId: id,
     name: z.string().trim().min(1).max(80).optional(),
     archived: z.boolean().optional(),
+    institution: z.string().trim().max(80).optional(),
+    lastFour: z
+      .string()
+      .regex(/^\d{4}$/)
+      .optional(),
+    cardTerms: cardTerms.optional(),
+    cardBill: cardBill.optional(),
   },
 );
 tool(
@@ -715,6 +740,72 @@ tool(
   "exports:read",
   "prepare",
   c,
+);
+
+// Manual portfolios share the canonical owner document and revision/receipt transaction.
+const investmentName = z.string().trim().min(1).max(80);
+const valuation = z.strictObject({
+  date,
+  quantity: z
+    .string()
+    .regex(/^\d{1,12}(\.\d{1,8})?$/)
+    .default("0"),
+  costMinor: z.number().int().min(0).max(1_000_000_000_000),
+  valueMinor: z.number().int().min(0).max(1_000_000_000_000),
+  note: z.string().trim().max(500).default(""),
+  rd: z
+    .strictObject({
+      instalmentMinor: amount,
+      maturityDate: date,
+      expectedMaturityMinor: amount.optional(),
+    })
+    .optional(),
+});
+const investmentChange = z.discriminatedUnion("action", [
+  z.strictObject({
+    action: z.literal("account"),
+    name: investmentName,
+    institution: z.string().trim().max(80).default(""),
+  }),
+  z.strictObject({
+    action: z.literal("holding"),
+    accountId: id,
+    type: z.enum(["mutual_fund", "gold", "stock", "recurring_deposit"]),
+    name: investmentName,
+    identifier: z.string().trim().max(80).default(""),
+    valuation,
+  }),
+  z.strictObject({ action: z.literal("valuation"), holdingId: id, valuation }),
+  z.strictObject({ action: z.literal("archive_account"), accountId: id, archived: z.boolean() }),
+  z.strictObject({ action: z.literal("archive_holding"), holdingId: id, archived: z.boolean() }),
+]);
+tool(
+  "get_investment_portfolio",
+  "Read manual mutual fund, gold, stock and RD positions at a date, separate from account journals; unknown values stay unknown.",
+  "accounts:read",
+  "read",
+  { ...c, asOf: date, accountId: id.optional() },
+);
+tool(
+  "list_investment_valuations",
+  "Read immutable dated position observations, including corrections, with revision-bound paging.",
+  "accounts:read",
+  "read",
+  { ...c, holdingId: id, ...paging },
+);
+tool(
+  "prepare_investment_change",
+  "Preview an investment account/holding, dated manual valuation or archive/restore. No bank posting, live quote or automatic trade.",
+  "accounts:write",
+  "prepare",
+  { ...c, ...revision, change: investmentChange },
+);
+tool(
+  "commit_investment_change",
+  "Commit the exact frozen investment preview once with revision, hash, receipt and audit checks.",
+  "accounts:write",
+  "write",
+  planCommit,
 );
 
 // Phase B is activated deliberately after migration 0004; legacy imports stay separate.

@@ -1,19 +1,36 @@
+import { AnalysisWorkspace } from "./analysis-workspace";
+import { InvestmentWorkspace } from "./investment-workspace";
 import { useEffect, useRef, useState } from "react";
-import { Link } from "@tanstack/react-router";
+import { Link, useNavigate } from "@tanstack/react-router";
+import { ChevronDown } from "lucide-react";
 import { TallyClient, TallyClientError, agentBaseUrl } from "@/lib/agent-tools/client";
-import { formatMoney, type Currency } from "@/lib/budget";
+import { formatMoney, monthKey, defaultDateForMonth, type Currency } from "@/lib/budget";
 import { StatementWorkspace } from "./statement-workspace";
 import { AccountWorkspace } from "./account-workspace";
 
 type Row = Record<string, any>;
+const workspaceSections = [
+  ["accounts", "Accounts & debt"],
+  ["investments", "Investments"],
+  ["analysis", "Analysis"],
+  ["statements", "Statements"],
+  ["ledger", "Legacy budget"],
+  ["categories", "Categories"],
+  ["imports", "Legacy imports"],
+  ["approvals", "Review & consent"],
+  ["chat", "Spending chat"],
+  ["tools", "Advanced tools"],
+];
+
 /** Owner/agent UI uses exactly the same service as REST and MCP; no local replica writes. */
 export function AgentWorkspace({
   initial = {},
 }: { initial?: { currency?: Currency; month?: string; section?: string } } = {}) {
+  const navigate = useNavigate({ from: "/agents" });
   const [token, setToken] = useState("");
   const [client, setClient] = useState<TallyClient | null>(null);
   const [currency, setCurrency] = useState<Currency>(initial.currency ?? "INR");
-  const [month, setMonth] = useState(initial.month ?? new Date().toISOString().slice(0, 7));
+  const [month, setMonth] = useState(initial.month ?? monthKey(new Date()));
   useEffect(() => {
     if (initial.currency) setCurrency(initial.currency);
     if (initial.month) setMonth(initial.month);
@@ -28,12 +45,12 @@ export function AgentWorkspace({
   const [busy, setBusy] = useState(false);
   const [connecting, setConnecting] = useState(true);
   const [needsCredential, setNeedsCredential] = useState(false);
-  const [tab, setTab] = useState(initial.section ?? "ledger");
+  const [tab, setTab] = useState(initial.section ?? "accounts");
   const [kind, setKind] = useState("expense");
   const [category, setCategory] = useState("Personal");
   const [amount, setAmount] = useState("");
   const [note, setNote] = useState("");
-  const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
+  const [date, setDate] = useState(defaultDateForMonth(monthKey(new Date())));
   const [editId, setEditId] = useState<string | null>(null);
   const [categoryName, setCategoryName] = useState("");
   const [goalName, setGoalName] = useState("");
@@ -66,6 +83,12 @@ export function AgentWorkspace({
     onResult?: (value: Row) => void;
   } | null>(null);
   const allowed = (name: string) => tools.some((t) => t.name === name);
+  function changeSection(value: string) {
+    setTab(value);
+    void navigate({ search: { currency, month, section: value } });
+    if (!retry.current) setError("");
+  }
+
   async function refresh(active = client, selectedCurrency = currency, selectedMonth = month) {
     if (!active) return;
     const epoch = generation.current;
@@ -75,6 +98,15 @@ export function AgentWorkspace({
       active.call("tally_list_categories", { currency: selectedCurrency, includeArchived: true }),
     ]);
     if (epoch !== generation.current) return;
+    if (
+      meta.revision !== stats.revision ||
+      (cats.revision !== undefined && cats.revision !== meta.revision)
+    )
+      throw new TallyClientError(
+        "revision_conflict",
+        "The ledger changed while loading. Refresh the workspace.",
+        409,
+      );
     setRevision(meta.revision);
     setSummary(stats);
     setCategories(cats.categories);
@@ -414,15 +446,21 @@ export function AgentWorkspace({
       <header className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold">Tally shared workspace</h1>
-          <p className="text-sm text-muted">Server ledger · revision {revision}</p>
+          <p className="text-sm text-muted">
+            One private server workspace · {summary ? `revision ${revision}` : "loading ledger…"}
+          </p>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="grid w-full grid-cols-2 items-center gap-2 sm:w-auto sm:grid-cols-[6rem_11rem_auto_auto]">
           <select
             aria-label="Ledger currency"
             className="field min-w-24 shrink-0"
             value={currency}
             disabled={busy}
-            onChange={(e) => setCurrency(e.target.value as Currency)}
+            onChange={(e) => {
+              const next = e.target.value as Currency;
+              setCurrency(next);
+              void navigate({ search: { currency: next, month, section: tab }, replace: true });
+            }}
           >
             <option>INR</option>
             <option>USD</option>
@@ -433,8 +471,31 @@ export function AgentWorkspace({
             type="month"
             value={month}
             disabled={busy}
-            onChange={(e) => setMonth(e.target.value)}
+            onChange={(e) => {
+              setMonth(e.target.value);
+              void navigate({
+                search: { currency, month: e.target.value, section: tab },
+                replace: true,
+              });
+            }}
           />
+          <button
+            className="btn btn-quiet"
+            disabled={busy}
+            onClick={async () => {
+              setBusy(true);
+              setError("");
+              try {
+                await refresh();
+              } catch (e) {
+                setError((e as Error).message);
+              } finally {
+                setBusy(false);
+              }
+            }}
+          >
+            Refresh workspace
+          </button>
           <button
             className="btn btn-quiet"
             onClick={() => {
@@ -458,33 +519,89 @@ export function AgentWorkspace({
           </button>
         </div>
       </header>
-      <nav className="flex flex-wrap gap-2" aria-label="Workspace sections">
-        {[
-          "accounts",
-          "statements",
-          "ledger",
-          "categories",
-          "imports",
-          "approvals",
-          "chat",
-          "tools",
-        ].map((value) => (
-          <button
-            className={`btn ${tab === value ? "btn-primary" : "btn-quiet"}`}
-            key={value}
-            onClick={() => {
-              setTab(value);
-              if (!retry.current) setError("");
-            }}
+      <div className="grid grid-cols-[minmax(0,1fr)_auto] items-end gap-2 sm:hidden">
+        <label className="text-sm">
+          Workspace section
+          <select
+            className="field mt-1"
+            aria-label="Workspace section"
+            value={tab}
+            onChange={(e) => changeSection(e.target.value)}
           >
-            {value === "ledger"
-              ? "Legacy budget"
-              : value === "imports"
-                ? "Legacy imports"
-                : value[0].toUpperCase() + value.slice(1)}
-          </button>
-        ))}
+            {workspaceSections.map(([value, label]) => (
+              <option key={value} value={value}>
+                {label}
+              </option>
+            ))}
+          </select>
+        </label>
+        <Link className="btn btn-quiet" to="/" search={{ currency, month }}>
+          Dashboard
+        </Link>
+      </div>
+      <nav className="hidden flex-wrap items-center gap-2 sm:flex" aria-label="Workspace sections">
+        <Link className="btn btn-quiet" to="/" search={{ currency, month }}>
+          Dashboard
+        </Link>
+        {workspaceSections
+          .filter(([value]) =>
+            ["accounts", "investments", "statements", "analysis"].includes(value),
+          )
+          .map(([value, label]) => (
+            <button
+              key={value}
+              className={`btn ${tab === value ? "btn-primary" : "btn-quiet"}`}
+              aria-pressed={tab === value}
+              onClick={() => changeSection(value)}
+            >
+              {label}
+            </button>
+          ))}
+        <details
+          className="relative ml-auto"
+          onKeyDown={(e) => {
+            if (e.key === "Escape") {
+              e.currentTarget.removeAttribute("open");
+              e.currentTarget.querySelector("summary")?.focus();
+            }
+          }}
+        >
+          <summary
+            aria-label="More workspace sections"
+            className={`btn list-none [&::-webkit-details-marker]:hidden ${["accounts", "investments", "statements", "analysis"].includes(tab) ? "btn-quiet" : "btn-primary"}`}
+          >
+            More <ChevronDown size={16} aria-hidden="true" className="shrink-0" />
+          </summary>
+          <div className="absolute right-0 top-full z-30 mt-2 grid min-w-52 rounded-md border border-line bg-surface p-1 shadow-lg">
+            {workspaceSections
+              .filter(
+                ([value]) => !["accounts", "investments", "statements", "analysis"].includes(value),
+              )
+              .map(([value, label]) => (
+                <button
+                  key={value}
+                  className="btn btn-quiet justify-start text-left"
+                  aria-pressed={tab === value}
+                  onClick={(e) => {
+                    changeSection(value);
+                    e.currentTarget.closest("details")?.removeAttribute("open");
+                  }}
+                >
+                  {label}
+                </button>
+              ))}
+          </div>
+        </details>
       </nav>
+      {tab === "analysis" && (
+        <AnalysisWorkspace
+          key={`${currency}:${month}`}
+          client={client}
+          currency={currency}
+          month={month}
+          revision={revision}
+        />
+      )}
       <div hidden={tab !== "accounts"}>
         <AccountWorkspace
           key={currency}
@@ -499,6 +616,18 @@ export function AgentWorkspace({
           run={run}
         />
       </div>
+      {tab === "investments" && (
+        <InvestmentWorkspace
+          key={currency}
+          client={client}
+          currency={currency}
+          revision={revision}
+          busy={busy}
+          enabled={allowed("tally_get_investment_portfolio")}
+          canWrite={allowed("tally_prepare_investment_change")}
+          run={run}
+        />
+      )}
       <div hidden={tab !== "statements"}>
         <StatementWorkspace
           key={currency}
@@ -583,6 +712,7 @@ export function AgentWorkspace({
                 <label className="block">
                   Type
                   <select
+                    aria-label="Kind"
                     className={control}
                     value={kind}
                     onChange={(e) => {
@@ -600,6 +730,7 @@ export function AgentWorkspace({
                 <label className="block">
                   Category
                   <select
+                    aria-label="Category"
                     className={control}
                     value={category}
                     onChange={(e) => setCategory(e.target.value)}
@@ -715,6 +846,7 @@ export function AgentWorkspace({
                   <label className="block">
                     Budget category
                     <select
+                      aria-label="Category"
                       className={control}
                       value={category}
                       onChange={(e) => {
@@ -993,6 +1125,7 @@ export function AgentWorkspace({
               <label className="block">
                 Column mapping
                 <textarea
+                  aria-label="Column mapping"
                   className={`${control} min-h-52 font-mono text-sm`}
                   value={mapping}
                   onChange={(e) => {
@@ -1183,7 +1316,7 @@ export function AgentWorkspace({
       )}
       {tab === "approvals" && (
         <section className="panel space-y-3">
-          <h2 className="text-lg font-medium">Owner approvals</h2>
+          <h2 className="text-lg font-medium">Review and consent</h2>
           <p className="text-muted">
             Review the exact currency, rows and revision before deciding. Bearer deployments require
             an owner grant. Private shared Tailscale financial previews can be committed directly;
@@ -1192,6 +1325,12 @@ export function AgentWorkspace({
           <button className="btn btn-quiet" onClick={() => void reviewApprovals()}>
             Refresh approvals
           </button>
+          {!approvals.length && (
+            <p className="text-sm text-muted">
+              No approvals loaded. Refresh to check pending reviews. Private financial changes use
+              their displayed preview directly; external AI sharing still needs consent.
+            </p>
+          )}
           {approvals.map((a) => (
             <div key={a.approvalId} className="rounded border border-line p-3">
               <p className="font-medium">
@@ -1289,6 +1428,7 @@ export function AgentWorkspace({
           <label className="block">
             Question
             <textarea
+              aria-label="Question"
               className={control}
               maxLength={500}
               value={question}
@@ -1369,6 +1509,7 @@ export function AgentWorkspace({
           <label className="block">
             Arguments
             <textarea
+              aria-label="Arguments"
               className={`${control} min-h-32 font-mono text-sm`}
               value={argsText}
               onChange={(e) => setArgsText(e.target.value)}

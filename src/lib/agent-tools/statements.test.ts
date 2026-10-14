@@ -116,11 +116,11 @@ async function fixture() {
   }
   return { store, service, ids, call, revision, commit, stage };
 }
-test("Phase B is off by default and discovery leaves the 79-tool foundation available", async () => {
+test("Phase B is off by default and discovery leaves the 83-tool foundation available", async () => {
   const s = new AgentToolService(new MemoryWorkspaceStore());
   const r = await s.execute(p, { version: 2, tool: "tally_get_capabilities", args: {} });
   assert.ok(r.ok);
-  if (r.ok) assert.equal((r.result.tools as unknown[]).length, 79);
+  if (r.ok) assert.equal((r.result.tools as unknown[]).length, 83);
   await assert.rejects(
     s.execute(p, { version: 2, tool: "tally_list_account_statements", args: { currency: "INR" } }),
     /activation/,

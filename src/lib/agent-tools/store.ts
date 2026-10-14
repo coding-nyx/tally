@@ -1,3 +1,4 @@
+import type { InvestmentBook, InvestmentChange } from "../investments.ts";
 import type { BudgetData, Currency, TxKind, Transaction, MonthlySettings } from "../budget.ts";
 import type { CsvTable, StatementMapping } from "../bank-statement.ts";
 import type { SpendingSummary } from "../ai/spending-chat.ts";
@@ -26,6 +27,7 @@ export type Ledger = {
   categories: Category[];
   accounting?: AccountingLedger;
   statements?: StatementLedger;
+  investments?: InvestmentBook;
 };
 export type Plan = {
   id: string;
@@ -45,6 +47,7 @@ export type Plan = {
   providerIdentity?: string;
   importId?: string;
   receiptId?: string;
+  investmentChange?: InvestmentChange;
   accountingChange?: AccountingChange;
   statementChange?: StatementChange;
 };

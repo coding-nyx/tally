@@ -1,6 +1,6 @@
 ---
 name: tally
-description: Operate Tally personal-finance ledgers through its scoped agent tools. Use for Tally bank/cash/card/loan accounts, reviewed openings and balanced journals, transactions, custom categories, monthly budgets/goals, reviewed CSV/text-PDF imports, exports, recovery, audit/undo, or consent-gated spending questions. Use the connected Tally MCP service or private REST/CLI bridge; discover capabilities first.
+description: Operate Tally personal-finance ledgers through its scoped agent tools. Use for Tally bank/cash/card/loan accounts, reviewed openings and balanced journals, transactions, custom categories, monthly budgets/goals, manual investment observations, reviewed CSV/text-PDF imports, exports, recovery, audit/undo, or consent-gated spending questions. Use the connected Tally MCP service or private REST/CLI bridge; discover capabilities first.
 ---
 
 # Tally
@@ -72,4 +72,10 @@ For optional AI, check `tally_get_ai_status`. If unconfigured, explain that setu
 - `unavailable`: preserve the request key and inspect/replay the receipt after service recovery.
 - `interrupted` AI request: outcome is unknown. Report it and obtain a new deliberate request/consent if the user wants another call.
 
-No tools manage bank credentials, host services, shell commands, SQL, recurring transactions, investments or tax advice. Such requests need a separate feature or owner administration task.
+No tools manage bank credentials, host services, shell commands, SQL, recurring transactions, live investment quotes/trades or tax advice. Such requests need a separate feature or owner administration task. Manual investment observations are available only when the operations below appear in discovery.
+
+## Manual investments and card bills
+
+When discovery lists the investment tools, use `tally_get_investment_portfolio` and `tally_list_investment_valuations` for dated mutual-fund/gold/stock/RD observations. `tally_prepare_investment_change` and `tally_commit_investment_change` use the same frozen preview policy as account changes. Investment account/holding ids are currency scoped. Value is a manually observed total, not price per unit; cost is remaining cost basis. Do not invent quotes, returns, tax, maturity values or financial records. RD terms are explicit monthly instalment, maturity date and optional manual maturity estimate. Valuations append corrections without deleting evidence; archive instead of erasing holdings.
+
+Account create/update accepts optional institution/last-four metadata; credit cards can also record credit limits and dated bill observations. Statement due and recorded debt are different values. Only recorded settlements after the statement day reduce calculated remaining due, including reversals; do not assume bank activity or refunds were imported. Use accounting exports for the investment history.

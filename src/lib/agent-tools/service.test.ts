@@ -58,8 +58,8 @@ async function approve(s: AgentToolService, value: Record<string, any>) {
 }
 test("catalog covers 62 real operations and rejects unauthenticated/overbroad arguments", async () => {
   assert.equal(Object.keys(legacyCatalog).length, 62);
-  assert.equal(Object.keys(foundationCatalog).length, 79);
-  assert.equal(Object.keys(catalog).length, 95);
+  assert.equal(Object.keys(foundationCatalog).length, 83);
+  assert.equal(Object.keys(catalog).length, 99);
   const s = fixture();
   await assert.rejects(
     call(s, "get_ledger", { currency: "INR", authenticated: true }),

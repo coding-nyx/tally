@@ -1,9 +1,9 @@
+import { ReviewDetails } from "./review-details";
 import { lazy, Suspense, useEffect, useMemo, useState } from "react";
-import { ChevronLeft, ChevronRight, Pencil, Plus, Trash2 } from "lucide-react";
+import { ChevronDown, ChevronLeft, ChevronRight, Pencil, Plus, Trash2 } from "lucide-react";
 import { EntryDialog } from "@/components/budget/entry-dialog";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { useSharedBudget } from "./use-shared-budget";
-import { SpendingChatPanel } from "@/components/budget/spending-chat-panel";
 import {
   centsToInput,
   defaultDateForMonth,
@@ -330,9 +330,7 @@ export function BudgetApp(initial: { currency?: Currency; month?: string } = {})
         {review && (
           <section className="panel space-y-3" aria-label="Frozen change preview">
             <h2 className="text-lg font-medium">Review proposed change</h2>
-            <pre className="max-h-72 overflow-auto whitespace-pre-wrap break-words text-sm">
-              {JSON.stringify(review.review, null, 2)}
-            </pre>
+            <ReviewDetails value={review.review} currency={currency} />
             {review.approvalRequired !== false && (
               <div className="space-y-2">
                 <button
@@ -407,7 +405,7 @@ export function BudgetApp(initial: { currency?: Currency; month?: string } = {})
           </section>
         )}
         <fieldset className="contents" disabled={busy || loading || !!pending}>
-          <header className="flex flex-col gap-4 border-b border-line pb-5 md:flex-row md:items-center md:justify-between">
+          <header className="flex flex-col gap-4 border-b border-line pb-5 lg:flex-row lg:items-center lg:justify-between">
             <div className="flex items-center gap-3">
               <svg viewBox="0 0 32 32" className="size-9 shrink-0" aria-hidden="true">
                 <rect width="32" height="32" rx="8" className="fill-accent" />
@@ -424,14 +422,14 @@ export function BudgetApp(initial: { currency?: Currency; month?: string } = {})
                 <p className="mt-1 text-sm text-muted">Budget planner</p>
               </div>
             </div>
-            <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center sm:justify-end">
-              <div className="grid w-full grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-2 sm:w-auto">
+            <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap sm:items-center sm:justify-end">
+              <div className="grid w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-2 sm:w-auto sm:grid-cols-[minmax(0,1fr)_auto_auto]">
                 <label className="sr-only" htmlFor="currency-select">
                   Ledger currency
                 </label>
                 <select
                   id="currency-select"
-                  className="field select min-w-0 w-full sm:min-w-36 sm:w-auto"
+                  className="field select min-w-0 w-full sm:min-w-48 sm:w-auto"
                   aria-label="Ledger currency"
                   value={data.currency}
                   onChange={(event) => changeCurrency(event.target.value as Currency)}
@@ -444,7 +442,7 @@ export function BudgetApp(initial: { currency?: Currency; month?: string } = {})
                     className="btn btn-quiet list-none whitespace-nowrap [&::-webkit-details-marker]:hidden"
                     aria-label="More data actions"
                   >
-                    More
+                    More <ChevronDown size={16} aria-hidden="true" className="shrink-0" />
                   </summary>
                   <div
                     className="absolute right-0 top-full z-30 mt-2 flex min-w-52 flex-col rounded-md border border-line bg-surface p-1 shadow-lg"
@@ -493,7 +491,7 @@ export function BudgetApp(initial: { currency?: Currency; month?: string } = {})
                 <button
                   type="button"
                   id="add-entry"
-                  className="btn btn-primary whitespace-nowrap"
+                  className="btn btn-primary col-span-2 whitespace-nowrap sm:col-span-1"
                   onClick={openCreate}
                 >
                   <Plus className="size-4" aria-hidden="true" />
@@ -536,6 +534,36 @@ export function BudgetApp(initial: { currency?: Currency; month?: string } = {})
             </div>
           </header>
 
+          <nav aria-label="Financial views" className="flex flex-wrap gap-2">
+            <Link
+              className="btn btn-quiet"
+              to="/agents"
+              search={{ section: "accounts", currency, month }}
+            >
+              Accounts & debt
+            </Link>
+            <Link
+              className="btn btn-quiet"
+              to="/agents"
+              search={{ section: "investments", currency, month }}
+            >
+              Investments
+            </Link>
+            <Link
+              className="btn btn-quiet"
+              to="/agents"
+              search={{ section: "statements", currency, month }}
+            >
+              Statements
+            </Link>
+            <Link
+              className="btn btn-quiet"
+              to="/agents"
+              search={{ section: "analysis", currency, month }}
+            >
+              Analysis
+            </Link>
+          </nav>
           <p className="text-sm text-muted">
             Unassigned income and expense records from the private server.{" "}
             <Link
@@ -545,7 +573,15 @@ export function BudgetApp(initial: { currency?: Currency; month?: string } = {})
             >
               Accounts and bank balances
             </Link>{" "}
-            use dated journals.
+            use dated journals.{" "}
+            <Link
+              to="/agents"
+              search={{ section: "investments", currency, month }}
+              className="text-accent"
+            >
+              Investments
+            </Link>{" "}
+            tracks holdings and valuations.
           </p>
           <section className="panel" aria-labelledby="remaining-label">
             <div className="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
@@ -928,7 +964,31 @@ export function BudgetApp(initial: { currency?: Currency; month?: string } = {})
                 )}
               </section>
 
-              <SpendingChatPanel data={data} month={month} />
+              <section className="panel space-y-3" aria-labelledby="analysis-heading">
+                <h2 id="analysis-heading" className="text-lg font-medium">
+                  Spending analysis
+                </h2>
+                <p className="text-sm text-muted">
+                  Review dated account income, expenses and cash movement, or open spending chat to
+                  review its provider and sharing consent.
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  <Link
+                    className="btn btn-quiet"
+                    to="/agents"
+                    search={{ currency, month, section: "analysis" }}
+                  >
+                    Account analysis
+                  </Link>
+                  <Link
+                    className="btn btn-quiet"
+                    to="/agents"
+                    search={{ currency, month, section: "chat" }}
+                  >
+                    Spending chat
+                  </Link>
+                </div>
+              </section>
 
               <section className="panel" aria-labelledby="budgets-heading">
                 <h2 id="budgets-heading" className="text-lg font-medium">

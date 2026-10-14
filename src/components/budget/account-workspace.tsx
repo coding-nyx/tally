@@ -1,6 +1,9 @@
+import { AccountDetails } from "./account-details";
+import { ReviewDetails } from "./review-details";
+import { CardDetails } from "./card-details";
 import { useEffect, useState } from "react";
 import { TallyClient } from "@/lib/agent-tools/client";
-import { formatMoney, type Currency } from "@/lib/budget";
+import { formatMoney, monthKey, defaultDateForMonth, type Currency } from "@/lib/budget";
 type Row = Record<string, any>;
 type Props = {
   client: TallyClient;
@@ -35,7 +38,7 @@ export function AccountWorkspace({
   canWrite,
   run,
 }: Props) {
-  const [asOf, setAsOf] = useState(new Date().toISOString().slice(0, 10));
+  const [asOf, setAsOf] = useState(defaultDateForMonth(monthKey(new Date())));
   const [correctionAccount, setCorrectionAccount] = useState("");
   const [correctionDelta, setCorrectionDelta] = useState("0");
   const [correctionReason, setCorrectionReason] = useState("");
@@ -44,6 +47,10 @@ export function AccountWorkspace({
   const [events, setEvents] = useState<Row[]>([]),
     [next, setNext] = useState<string | null>(null);
   const [error, setError] = useState("");
+  const [editingAccount, setEditingAccount] = useState<string | null>(null);
+  const [accountFilter, setAccountFilter] = useState("all");
+  const [institution, setInstitution] = useState("");
+  const [lastFour, setLastFour] = useState("");
   const [name, setName] = useState(""),
     [type, setType] = useState("bank");
   const [openingKnown, setOpeningKnown] = useState(false),
@@ -72,7 +79,7 @@ export function AccountWorkspace({
   const money = (value: number | null) =>
     value === null ? "Unknown" : formatMoney(value, currency);
   const control = "field w-full";
-  const locked = busy || reviewing || !canWrite;
+  const locked = busy || reviewing || !canWrite || !position || position.revision !== revision;
   useEffect(() => {
     if (!canRead) return;
     let live = true;
@@ -191,6 +198,31 @@ export function AccountWorkspace({
     <div className="space-y-5">
       <section className="panel space-y-3">
         <h2 className="text-xl font-semibold">Recorded accounts</h2>
+        <div className="flex flex-wrap gap-2" role="group" aria-label="Account group">
+          {[
+            ["all", "All accounts"],
+            ["credit_card", "Credit cards"],
+            ["loan", "Loans & debt"],
+            ["bank", "Bank accounts"],
+            ["cash", "Cash"],
+          ].map(([value, label]) => (
+            <button
+              key={value}
+              className={`btn ${accountFilter === value ? "btn-primary" : "btn-quiet"}`}
+              aria-pressed={accountFilter === value}
+              onClick={() => setAccountFilter(value)}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+        {accountFilter === "loan" && (
+          <p className="text-sm text-muted">
+            Recorded loan principal and repayment history. Use “Loan borrowing” or “Loan repayment”
+            below to record movement. EMI schedules, automatic interest and payment reminders are
+            not implemented.
+          </p>
+        )}
         <p className="text-sm text-muted">
           Bank and cash balances, card debt and loan principal come from reviewed journals. Legacy
           budget entries are separate until an explicit migration. Dated statement coverage appears
@@ -224,68 +256,147 @@ export function AccountWorkspace({
         )}
         <p className="text-xs text-muted">
           As of {asOf} · tracked accounts only · review each account’s source status · no live bank
-          connection
+          connection. Totals cover all tracked accounts; filters only change the list below.
         </p>
-        {position?.accounts?.map((row: Row) => (
-          <div key={row.account.id} className="rounded border border-line p-3">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <div>
-                <h3 className="font-medium">{row.account.name}</h3>
-                <p className="text-sm text-muted">
-                  {row.account.type.replaceAll("_", " ")} {row.account.archived ? "· archived" : ""}
-                </p>
+        {position?.accounts
+          ?.filter((row: Row) => accountFilter === "all" || row.account.type === accountFilter)
+          .map((row: Row) => (
+            <div key={row.account.id} className="rounded border border-line p-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <h3 className="font-medium">{row.account.name}</h3>
+                  <p className="text-sm text-muted">
+                    {row.account.type.replaceAll("_", " ")} {row.account.institution}{" "}
+                    {row.account.lastFour ? `···· ${row.account.lastFour}` : ""}{" "}
+                    {row.account.archived ? "· archived" : ""}
+                  </p>
+                </div>
+                <p className="text-lg">{money(row.balanceMinor)}</p>
               </div>
-              <p className="text-lg">{money(row.balanceMinor)}</p>
-            </div>
-            <p className="mt-1 text-xs text-muted">
-              {row.openingKnown
-                ? `Opening ${row.account.opening.date} (${row.account.opening.timing.replaceAll("_", " ")})`
-                : "Opening unknown"}{" "}
-              · latest recorded event {row.lastRecordedDate ?? "none"} · {row.reconciliation}
-              {row.lastStatementDate ? ` · latest statement ${row.lastStatementDate}` : ""}
-            </p>
-            <div className="mt-2 flex flex-wrap gap-2">
-              {!row.account.opening && (
+              <p className="mt-1 text-xs text-muted">
+                {row.openingKnown
+                  ? `Opening ${row.account.opening.date} (${row.account.opening.timing.replaceAll("_", " ")})`
+                  : "Opening unknown"}{" "}
+                · latest recorded event {row.lastRecordedDate ?? "none"} · {row.reconciliation}
+                {row.lastStatementDate ? ` · latest statement ${row.lastStatementDate}` : ""}
+              </p>
+              {row.card && (
+                <div className="mt-3 grid gap-2 text-sm sm:grid-cols-2">
+                  <p>Recorded credit limit: {money(row.card.creditLimitMinor)}</p>
+                  <p>Available from recorded debt: {money(row.card.availableCreditMinor)}</p>
+                  <p>Statement due remaining: {money(row.card.remainingDueMinor)}</p>
+                  <p>Minimum remaining: {money(row.card.remainingMinimumMinor)}</p>
+                  <p>
+                    {row.card.bill
+                      ? `Bill ${row.card.bill.statementDate} · due ${row.card.bill.dueDate}${row.card.overdue ? " · overdue" : ""}`
+                      : "No dated bill recorded"}
+                  </p>
+                  <p className="text-xs text-muted sm:col-span-2">{row.card.basis}</p>
+                </div>
+              )}
+              {row.account.type === "loan" && (
+                <p className="mt-2 text-sm">
+                  Recorded principal outstanding: {money(row.balanceMinor)} · repayments split
+                  principal from interest and fees.
+                </p>
+              )}
+              <div className="mt-2 flex flex-wrap gap-2">
+                <button
+                  className="btn btn-quiet"
+                  disabled={locked || !!preview}
+                  onClick={() => setEditingAccount(row.account.id)}
+                >
+                  Edit account details
+                </button>
+                {!row.account.opening && (
+                  <button
+                    className="btn btn-quiet"
+                    disabled={locked}
+                    onClick={() => {
+                      try {
+                        prepare("tally_prepare_opening_balance", {
+                          accountId: row.account.id,
+                          opening: opening(),
+                        });
+                      } catch (e) {
+                        setError((e as Error).message);
+                      }
+                    }}
+                  >
+                    Review opening using fields below
+                  </button>
+                )}
                 <button
                   className="btn btn-quiet"
                   disabled={locked}
-                  onClick={() => {
-                    try {
-                      prepare("tally_prepare_opening_balance", {
-                        accountId: row.account.id,
-                        opening: opening(),
-                      });
-                    } catch (e) {
-                      setError((e as Error).message);
-                    }
-                  }}
+                  onClick={() =>
+                    prepare("tally_prepare_account_update", {
+                      accountId: row.account.id,
+                      archived: !row.account.archived,
+                    })
+                  }
                 >
-                  Review opening using fields below
+                  {row.account.archived ? "Review restore" : "Review archive"}
                 </button>
+              </div>
+              {editingAccount === row.account.id && (
+                <AccountDetails
+                  key={row.account.id}
+                  account={row.account}
+                  revision={revision}
+                  locked={locked || !!preview}
+                  prepare={prepare}
+                  onClose={() => setEditingAccount(null)}
+                />
               )}
-              <button
-                className="btn btn-quiet"
-                disabled={locked}
-                onClick={() =>
-                  prepare("tally_prepare_account_update", {
-                    accountId: row.account.id,
-                    archived: !row.account.archived,
-                  })
-                }
-              >
-                {row.account.archived ? "Review restore" : "Review archive"}
-              </button>
             </div>
-          </div>
-        ))}
+          ))}
+        {!!accounts.length &&
+          accountFilter !== "all" &&
+          !accounts.some((a: Row) => a.type === accountFilter) && (
+            <p className="text-muted">
+              No{" "}
+              {accountFilter === "loan"
+                ? "loans"
+                : accountFilter.replaceAll("_", " ") + " accounts"}{" "}
+              recorded. Add one below.
+            </p>
+          )}
         {!accounts.length && (
           <p className="text-muted">
             No accounts recorded. Add an account below; an unknown opening stays unknown.
           </p>
         )}
       </section>
+      <CardDetails
+        accounts={accounts}
+        revision={revision}
+        locked={locked || !!preview}
+        prepare={prepare}
+      />
       <section className="panel space-y-3">
-        <h2 className="text-lg font-medium">Add account / opening fields</h2>
+        <h2 className="text-lg font-medium">Add bank account, card or loan</h2>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <label>
+            Institution (optional)
+            <input
+              className="field w-full"
+              value={institution}
+              maxLength={80}
+              onChange={(e) => setInstitution(e.target.value)}
+            />
+          </label>
+          <label>
+            Last four digits (optional)
+            <input
+              className="field w-full"
+              value={lastFour}
+              maxLength={4}
+              inputMode="numeric"
+              onChange={(e) => setLastFour(e.target.value)}
+            />
+          </label>
+        </div>
         <div className="grid gap-3 sm:grid-cols-2">
           <label>
             Account name
@@ -298,7 +409,12 @@ export function AccountWorkspace({
           </label>
           <label>
             Account type
-            <select className={control} value={type} onChange={(e) => setType(e.target.value)}>
+            <select
+              aria-label="Account type"
+              className={control}
+              value={type}
+              onChange={(e) => setType(e.target.value)}
+            >
               {["bank", "cash", "credit_card", "loan"].map((value) => (
                 <option key={value} value={value}>
                   {value.replaceAll("_", " ")}
@@ -317,7 +433,12 @@ export function AccountWorkspace({
           </label>
           <label>
             Opening cutoff
-            <select className={control} value={timing} onChange={(e) => setTiming(e.target.value)}>
+            <select
+              aria-label="Opening cutoff"
+              className={control}
+              value={timing}
+              onChange={(e) => setTiming(e.target.value)}
+            >
               <option value="start_of_day">Before that day’s movements</option>
               <option value="end_of_day">After that day’s movements</option>
             </select>
@@ -351,6 +472,8 @@ export function AccountWorkspace({
               prepare("tally_prepare_account", {
                 name,
                 type,
+                institution,
+                ...(lastFour ? { lastFour } : {}),
                 ...(openingKnown ? { opening: opening() } : {}),
               });
             } catch (e) {
@@ -371,6 +494,7 @@ export function AccountWorkspace({
           <label>
             Event
             <select
+              aria-label="Event"
               className={control}
               value={eventKind}
               onChange={(e) => {
@@ -388,7 +512,14 @@ export function AccountWorkspace({
                 "refund",
               ].map((kind) => (
                 <option key={kind} value={kind}>
-                  {kind === "transfer" ? "Transfer / ATM withdrawal" : kind.replaceAll("_", " ")}
+                  {(
+                    {
+                      transfer: "Transfer / ATM withdrawal",
+                      loan_payment: "Loan repayment",
+                      loan_borrowing: "Loan borrowing",
+                      card_payment: "Credit card payment",
+                    } as Record<string, string>
+                  )[kind] ?? kind}
                 </option>
               ))}
             </select>
@@ -405,6 +536,7 @@ export function AccountWorkspace({
           <label>
             Bank / cash / paying or receiving account
             <select
+              aria-label="Bank / cash / paying or receiving account"
               className={control}
               value={primary}
               onChange={(e) => setPrimary(e.target.value)}
@@ -421,6 +553,7 @@ export function AccountWorkspace({
             <label>
               Destination / card / loan account
               <select
+                aria-label="Destination / card / loan account"
                 className={control}
                 value={secondary}
                 onChange={(e) => setSecondary(e.target.value)}
@@ -449,6 +582,7 @@ export function AccountWorkspace({
                 ? "Interest / fee category"
                 : "Income / expense category"}
               <select
+                aria-label="Journal category"
                 className={control}
                 value={categoryId}
                 onChange={(e) => setCategoryId(e.target.value)}
@@ -492,6 +626,7 @@ export function AccountWorkspace({
             <label>
               Original purchase
               <select
+                aria-label="Original purchase"
                 className={control}
                 value={originalId}
                 onChange={(e) => setOriginalId(e.target.value)}
@@ -540,6 +675,7 @@ export function AccountWorkspace({
           <label>
             Account
             <select
+              aria-label="Correction account"
               className={control}
               value={correctionAccount}
               onChange={(e) => setCorrectionAccount(e.target.value)}
@@ -603,9 +739,7 @@ export function AccountWorkspace({
             Nothing is posted until the displayed change is reviewed and committed. Account, cutoff,
             currency and postings must match your intent.
           </p>
-          <pre className="max-h-80 overflow-auto whitespace-pre-wrap break-words text-sm">
-            {JSON.stringify(preview.review, null, 2)}
-          </pre>
+          <ReviewDetails value={preview.review} currency={currency} />
           <div className="flex flex-wrap gap-2">
             {preview.approvalRequired !== false && !approvalId && (
               <button

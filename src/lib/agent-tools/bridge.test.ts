@@ -50,7 +50,7 @@ test("official MCP SDK stdio performs discovery and a real tool call against syn
     });
     input.write(`${JSON.stringify({ jsonrpc: "2.0", method: "notifications/initialized" })}\n`);
     const list = await send(2, "tools/list", {});
-    assert.equal(list.tools.length, 79);
+    assert.equal(list.tools.length, 83);
     assert.ok(
       list.tools
         .find((t: any) => t.name === "tally_create_category")

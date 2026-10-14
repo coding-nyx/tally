@@ -38,7 +38,7 @@ test("workspace discovery uses the private prefix and no credential or AI call",
   const discovery = await new TallyClient(endpoint).discover();
   assert.equal(discovery.authMode, "tailnet");
   assert.equal(discovery.storageConfigured, true);
-  assert.equal(discovery.tools.length, 95);
+  assert.equal(discovery.tools.length, 99);
   assert.equal(requests, 1);
 });
 

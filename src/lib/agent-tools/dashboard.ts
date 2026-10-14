@@ -78,6 +78,8 @@ export function dashboardSearch(search: Record<string, unknown>): {
     ...(typeof search.section === "string" &&
     [
       "accounts",
+      "investments",
+      "analysis",
       "statements",
       "ledger",
       "categories",

@@ -1,3 +1,9 @@
+import {
+  emptyInvestments,
+  investmentChange,
+  applyInvestmentChange,
+  investmentPortfolio,
+} from "../investments.ts";
 import { createHash, randomUUID } from "node:crypto";
 import {
   catalog,
@@ -371,10 +377,12 @@ export class AgentToolService {
         if (frozenAfter) {
           delete frozenAfter.accounting;
           delete frozenAfter.statements;
+          delete frozenAfter.investments;
         }
         if (frozenBefore) {
           delete frozenBefore.accounting;
           delete frozenBefore.statements;
+          delete frozenBefore.investments;
         }
         const value: Plan = {
           id: randomUUID(),
@@ -385,7 +393,9 @@ export class AgentToolService {
           hash: hash({ operation, after: frozenAfter, review, ...extra }),
           expiresAt: Date.now() + 24 * 60 * 60 * 1000,
           status: "pending",
-          ...(extra.accountingChange || extra.statementChange ? {} : { before: frozenBefore }),
+          ...(extra.accountingChange || extra.statementChange || extra.investmentChange
+            ? {}
+            : { before: frozenBefore }),
           after: frozenAfter,
           review,
           ...extra,
@@ -426,7 +436,12 @@ export class AgentToolService {
             "The owner must approve this exact preview through the trusted approval interface.",
             403,
           );
-        if (!preview.after && !preview.accountingChange && !preview.statementChange)
+        if (
+          !preview.after &&
+          !preview.accountingChange &&
+          !preview.statementChange &&
+          !preview.investmentChange
+        )
           fail("invalid_plan", "This preview has no ledger change.");
         if (preview.importId) {
           const draft = owned(w.imports[preview.importId], p, args.currency);
@@ -446,7 +461,15 @@ export class AgentToolService {
           );
           result = { backupFileId: file.id };
         } else result = {};
-        if (preview.statementChange) {
+        if (preview.investmentChange) {
+          accountingWork(() =>
+            applyInvestmentChange(
+              (ledger!.investments ??= emptyInvestments()),
+              preview.investmentChange!,
+            ),
+          );
+          accountingChanged = true;
+        } else if (preview.statementChange) {
           if (preview.statementChange.events.length)
             assertPrincipal(p, "journal:write", args.currency);
           accountingWork(() =>
@@ -473,6 +496,7 @@ export class AgentToolService {
             ...structuredClone(preview.after!),
             accounting: ledger!.accounting,
             statements: ledger!.statements,
+            investments: ledger!.investments,
           };
         preview.status = "committed";
         preview.receiptId = preview.id;
@@ -497,7 +521,8 @@ export class AgentToolService {
         accountingWork(() => applyAccountingChange(after, change, ledger!.categories));
         const asOf =
           change.event?.date ??
-          change.account?.opening?.date ??
+          args.cardBill?.statementDate ??
+          (args.opening ? change.account?.opening?.date : undefined) ??
           new Date().toISOString().slice(0, 10);
         return plan(
           operation,
@@ -897,6 +922,69 @@ export class AgentToolService {
         case "commit_legacy_migration":
           result = commit("legacy-migration");
           break;
+        case "get_investment_portfolio":
+          result = {
+            ...accountingWork(() =>
+              investmentPortfolio(
+                ledger!.investments ?? emptyInvestments(),
+                args.asOf,
+                args.accountId,
+              ),
+            ),
+            currency: args.currency,
+            revision: ledger!.revision,
+          };
+          break;
+        case "list_investment_valuations": {
+          const book = ledger!.investments ?? emptyInvestments();
+          if (!book.holdings.some((h) => h.id === args.holdingId))
+            fail("not_found", "Holding not found in this currency.", 404);
+          result = paginate(
+            book.valuations
+              .filter((v) => v.holdingId === args.holdingId)
+              .slice()
+              .reverse(),
+            args,
+            {
+              actor: p.actorId,
+              currency: args.currency,
+              holdingId: args.holdingId,
+              revision: ledger!.revision,
+            },
+          );
+          break;
+        }
+        case "prepare_investment_change": {
+          const change = accountingWork(() =>
+            investmentChange(ledger!.investments ?? emptyInvestments(), args, p.actorId),
+          );
+          const book = ledger!.investments ?? emptyInvestments();
+          const holding =
+            change.holding ?? book.holdings.find((h) => h.id === change.valuation?.holdingId);
+          const account = change.account ?? book.accounts.find((a) => a.id === holding?.accountId);
+          const previousValuation =
+            holding && change.valuation
+              ? (investmentPortfolio(book, change.valuation.date).holdings.find(
+                  (h) => h.holding.id === holding.id,
+                )?.valuation ?? null)
+              : null;
+          result = plan(
+            "investment",
+            undefined,
+            {
+              account,
+              holding,
+              previousValuation,
+              change,
+              valuationSource: "Manual observation; no bank posting or live quote.",
+            },
+            { investmentChange: change, requiredScope: "accounts:write" },
+          );
+          break;
+        }
+        case "commit_investment_change":
+          result = commit("investment");
+          break;
         case "list_accounts":
           result = {
             accounts: accounting().accounts,
@@ -929,8 +1017,17 @@ export class AgentToolService {
           );
           break;
         case "prepare_account_update": {
-          if (args.name === undefined && args.archived === undefined)
-            fail("invalid_args", "Supply a name or archive status.");
+          if (
+            [
+              args.name,
+              args.archived,
+              args.institution,
+              args.lastFour,
+              args.cardTerms,
+              args.cardBill,
+            ].every((v) => v === undefined)
+          )
+            fail("invalid_args", "Supply an account detail or archive status.");
           result = accountingPlan(
             "accounting-account",
             accountingWork(() => updateAccount(accounting(), args)),
@@ -1036,6 +1133,7 @@ export class AgentToolService {
                   currency: args.currency,
                   revision: ledger!.revision,
                   accounting: accounting(),
+                  investments: ledger!.investments ?? emptyInvestments(),
                   categories: ledger!.categories,
                   statements: evidence(),
                 }),

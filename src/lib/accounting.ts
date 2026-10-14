@@ -8,6 +8,17 @@ export type Account = {
   name: string;
   archived: boolean;
   createdAt: number;
+  institution?: string;
+  lastFour?: string;
+  cardTerms?: { creditLimitMinor: number };
+  cardBills?: Array<{
+    id: string;
+    statementDate: string;
+    dueDate: string;
+    totalDueMinor: number;
+    minimumDueMinor: number;
+    recordedAt: number;
+  }>;
   opening?: {
     date: string;
     timing: "start_of_day" | "end_of_day";
@@ -116,6 +127,61 @@ export function accountBalance(ledger: AccountingLedger, id: string, asOf: strin
         .sort()
         .at(-1) ?? null,
     freshness: "Recorded journal only; no live bank connection or statement reconciliation.",
+    ...(account.type === "credit_card"
+      ? { card: cardStatus(ledger, account, asOf, openingKnown ? movementMinor : null) }
+      : {}),
+  };
+}
+/** Bills are end-of-statement-day observations. Only later recorded settlements reduce them. */
+export function cardStatus(
+  ledger: AccountingLedger,
+  account: Account,
+  asOf: string,
+  balanceMinor: number | null,
+) {
+  const bill = (account.cardBills ?? [])
+    .filter((b) => b.statementDate <= asOf)
+    .reduce<NonNullable<Account["cardBills"]>[number] | null>(
+      (last, b) => (!last || b.statementDate >= last.statementDate ? b : last),
+      null,
+    );
+  const payments = bill
+    ? ledger.events
+        .filter(
+          (e) =>
+            e.kind === "card_payment" &&
+            e.date > bill.statementDate &&
+            e.date <= asOf &&
+            e.postings.some((p) => p.accountId === account.id),
+        )
+        .flatMap((e) => [
+          e,
+          ...ledger.events.filter(
+            (r) => r.kind === "reversal" && r.relatedEventId === e.id && r.date <= asOf,
+          ),
+        ])
+    : [];
+  const paidMinor = exact(
+    payments.flatMap((e) =>
+      e.postings
+        .filter((p) => p.accountId === account.id)
+        .map((p) => p.amountMinor * (p.side === "debit" ? 1 : -1)),
+    ),
+  );
+  const remainingDueMinor = bill ? Math.max(0, bill.totalDueMinor - paidMinor) : null;
+  return {
+    creditLimitMinor: account.cardTerms?.creditLimitMinor ?? null,
+    availableCreditMinor:
+      account.cardTerms && balanceMinor !== null
+        ? exact([account.cardTerms.creditLimitMinor, -balanceMinor])
+        : null,
+    bill,
+    paidSinceStatementMinor: paidMinor,
+    remainingDueMinor,
+    remainingMinimumMinor: bill ? Math.max(0, bill.minimumDueMinor - paidMinor) : null,
+    overdue: !!bill && bill.dueDate < asOf && remainingDueMinor! > 0,
+    basis:
+      "Recorded bill and journal settlements after statement day; excludes pending/unrecorded bank activity.",
   };
 }
 export function financialPosition(
@@ -213,11 +279,15 @@ export function prepareAccount(
     )
   )
     reject("An account with this name already exists.");
+  if (args.cardTerms && args.type !== "credit_card") reject("Credit limits apply only to cards.");
   const account: Account = {
     id: randomUUID(),
     currency,
     name: args.name,
     type: args.type,
+    ...(args.institution !== undefined ? { institution: args.institution } : {}),
+    ...(args.lastFour !== undefined ? { lastFour: args.lastFour } : {}),
+    ...(args.cardTerms ? { cardTerms: args.cardTerms } : {}),
     archived: false,
     createdAt: Date.now(),
   };
@@ -287,6 +357,21 @@ export function updateAccount(ledger: AccountingLedger, args: any): AccountingCh
     )
       reject("An account with this name already exists.");
     account.name = args.name;
+  }
+  if (args.institution !== undefined) account.institution = args.institution;
+  if (args.lastFour !== undefined) account.lastFour = args.lastFour;
+  if (args.cardTerms || args.cardBill) {
+    if (account.type !== "credit_card") reject("Card details apply only to credit cards.");
+    if (account.archived) reject("Restore this account before recording card details.");
+    if (args.cardTerms) account.cardTerms = structuredClone(args.cardTerms);
+    if (args.cardBill) {
+      if ((account.cardBills?.length ?? 0) >= 500)
+        reject("At most 500 bill observations per card.");
+      account.cardBills = [
+        ...(account.cardBills ?? []),
+        { ...args.cardBill, id: randomUUID(), recordedAt: Date.now() },
+      ];
+    }
   }
   if (args.archived !== undefined) account.archived = args.archived;
   return { account };
