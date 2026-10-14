@@ -159,7 +159,7 @@ The standalone build produces `.output/`. Run `node scripts/start-tally.mjs` fro
 
 Keep local development/preview servers off unless explicitly authorized by the operator. The commands below document setup; they are not an instruction for an agent to start them automatically.
 
-For an explicitly authorized synthetic demo, `npm run dev:agent-fixtures` starts loopback-only development with synthetic in-memory records and a local provider stub. It does not test durable PostgreSQL or real external AI. For a normal durable development instance, configure the shared service below, then use `npm run dev`. Running `npm run dev` without shared storage does **not** turn the dashboard into a browser-local app. Vite development reads direct process environment variables; the production launcher resolves the selected `*_FILE` secret variables.
+For an explicitly authorized synthetic demo, `npm run dev:agent-fixtures` starts loopback-only development with synthetic in-memory records and a local provider stub. It does not test durable PostgreSQL or real external AI. For a normal durable development instance, configure the shared service above, then use `npm run dev`. Running `npm run dev` without shared storage does **not** turn the dashboard into a browser-local app. Vite development reads direct process environment variables; the production launcher resolves the selected `*_FILE` secret variables.
 
 ## MCP connection
 
