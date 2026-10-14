@@ -97,6 +97,11 @@ let browser = null;
 try {
   browser = await chromium.launch({
     headless: true,
+    // Use an explicitly selected installed browser when this host has no
+    // Playwright-managed Chromium. CI continues to use its default browser.
+    ...(process.env.BROWSER_SMOKE_EXECUTABLE_PATH
+      ? { executablePath: process.env.BROWSER_SMOKE_EXECUTABLE_PATH }
+      : {}),
     args: ["--no-sandbox", "--disable-dev-shm-usage"],
   });
 

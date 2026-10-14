@@ -1,0 +1,10 @@
+# Private shared access only. Does not create a database, credentials or schema.
+# All clients permitted through private Serve get the same full-scope principal.
+services:
+  finance:
+    environment:
+      TALLY_AGENT_ENABLED: "true"
+      TALLY_AGENT_AUTH_MODE: tailnet
+      TALLY_AGENT_WORKSPACE_ID: "${TALLY_AGENT_WORKSPACE_ID:-personal}"
+      TALLY_AGENT_PUBLIC_ORIGIN: "${TALLY_AGENT_PUBLIC_ORIGIN:?Set the private HTTPS origin without /finance}"
+      TALLY_AGENT_TRUSTED_PROXY_IPS: "${TALLY_AGENT_TRUSTED_PROXY_IPS:?Set the observed Docker proxy socket address}"

@@ -1,0 +1,5690 @@
+{
+  "version": 2,
+  "tools": [
+    {
+      "name": "tally_get_capabilities",
+      "description": "Discover enabled operations, limits and required scopes. Amounts are integer minor units; currencies are separate.",
+      "scope": "summary:read",
+      "effect": "read",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "tally_get_service_status",
+      "description": "Read service and storage readiness without secrets.",
+      "scope": "summary:read",
+      "effect": "read",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "tally_list_ledgers",
+      "description": "List ledgers authorized for this actor.",
+      "scope": "summary:read",
+      "effect": "read",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "tally_get_ledger",
+      "description": "Read a ledger revision and metadata, without transaction descriptions.",
+      "scope": "summary:read",
+      "effect": "read",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "currency": {
+            "type": "string",
+            "enum": [
+              "INR",
+              "USD"
+            ]
+          }
+        },
+        "required": [
+          "currency"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "tally_list_months",
+      "description": "List months containing transactions or settings.",
+      "scope": "summary:read",
+      "effect": "read",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "currency": {
+            "type": "string",
+            "enum": [
+              "INR",
+              "USD"
+            ]
+          }
+        },
+        "required": [
+          "currency"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "tally_list_categories",
+      "description": "Read built-in and custom categories, including archived categories when requested.",
+      "scope": "summary:read",
+      "effect": "read",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "currency": {
+            "type": "string",
+            "enum": [
+              "INR",
+              "USD"
+            ]
+          },
+          "includeArchived": {
+            "default": false,
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "currency",
+          "includeArchived"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "tally_create_category",
+      "description": "Create a unique income or expense category in this currency ledger.",
+      "scope": "categories:write",
+      "effect": "write",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "currency": {
+            "type": "string",
+            "enum": [
+              "INR",
+              "USD"
+            ]
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "income",
+              "expense"
+            ]
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 40
+          }
+        },
+        "required": [
+          "currency",
+          "expectedRevision",
+          "kind",
+          "name"
+        ],
+        "additionalProperties": false
+      },
+      "idempotencyKeyRequired": true
+    },
+    {
+      "name": "tally_update_category",
+      "description": "Rename a category and atomically update transaction and budget references.",
+      "scope": "categories:write",
+      "effect": "write",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "currency": {
+            "type": "string",
+            "enum": [
+              "INR",
+              "USD"
+            ]
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "categoryId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 40
+          }
+        },
+        "required": [
+          "currency",
+          "expectedRevision",
+          "categoryId",
+          "name"
+        ],
+        "additionalProperties": false
+      },
+      "idempotencyKeyRequired": true
+    },
+    {
+      "name": "tally_archive_category",
+      "description": "Archive a category while preserving historical entries and budgets.",
+      "scope": "categories:write",
+      "effect": "write",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "currency": {
+            "type": "string",
+            "enum": [
+              "INR",
+              "USD"
+            ]
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "categoryId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          }
+        },
+        "required": [
+          "currency",
+          "expectedRevision",
+          "categoryId"
+        ],
+        "additionalProperties": false
+      },
+      "idempotencyKeyRequired": true
+    },
+    {
+      "name": "tally_restore_category",
+      "description": "Make an archived category available for new entries again.",
+      "scope": "categories:write",
+      "effect": "write",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "currency": {
+            "type": "string",
+            "enum": [
+              "INR",
+              "USD"
+            ]
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "categoryId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          }
+        },
+        "required": [
+          "currency",
+          "expectedRevision",
+          "categoryId"
+        ],
+        "additionalProperties": false
+      },
+      "idempotencyKeyRequired": true
+    },
+    {
+      "name": "tally_get_preferences",
+      "description": "Read the owner's display currency preference.",
+      "scope": "summary:read",
+      "effect": "read",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "tally_update_preferences",
+      "description": "Set the display currency without moving money between ledgers.",
+      "scope": "settings:write",
+      "effect": "write",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "currency": {
+            "type": "string",
+            "enum": [
+              "INR",
+              "USD"
+            ]
+          }
+        },
+        "required": [
+          "currency"
+        ],
+        "additionalProperties": false
+      },
+      "idempotencyKeyRequired": true
+    },
+    {
+      "name": "tally_list_transactions",
+      "description": "Read at most 100 entries. Cursors are bound to a query and revision; refresh after stale_cursor.",
+      "scope": "transactions:read",
+      "effect": "read",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "currency": {
+            "type": "string",
+            "enum": [
+              "INR",
+              "USD"
+            ]
+          },
+          "limit": {
+            "default": 50,
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100
+          },
+          "cursor": {
+            "type": "string",
+            "maxLength": 2048
+          },
+          "month": {
+            "type": "string",
+            "pattern": "^\\d{4}-(0[1-9]|1[0-2])$"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "income",
+              "expense"
+            ]
+          }
+        },
+        "required": [
+          "currency",
+          "limit"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "tally_get_transaction",
+      "description": "Read one transaction by opaque id.",
+      "scope": "transactions:read",
+      "effect": "read",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "currency": {
+            "type": "string",
+            "enum": [
+              "INR",
+              "USD"
+            ]
+          },
+          "transactionId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          }
+        },
+        "required": [
+          "currency",
+          "transactionId"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "tally_create_transaction",
+      "description": "Create a transaction using a durable idempotency key and expected ledger revision.",
+      "scope": "transactions:write",
+      "effect": "write",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "currency": {
+            "type": "string",
+            "enum": [
+              "INR",
+              "USD"
+            ]
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "transaction": {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "income",
+                  "expense"
+                ]
+              },
+              "amountMinor": {
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 1000000000000
+              },
+              "category": {
+                "type": "string",
+                "maxLength": 40
+              },
+              "note": {
+                "type": "string",
+                "maxLength": 80
+              },
+              "date": {
+                "type": "string",
+                "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$"
+              }
+            },
+            "required": [
+              "kind",
+              "amountMinor",
+              "category",
+              "note",
+              "date"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "currency",
+          "expectedRevision",
+          "transaction"
+        ],
+        "additionalProperties": false
+      },
+      "idempotencyKeyRequired": true
+    },
+    {
+      "name": "tally_update_transaction",
+      "description": "Patch a transaction; amounts are positive integer minor units.",
+      "scope": "transactions:write",
+      "effect": "write",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "currency": {
+            "type": "string",
+            "enum": [
+              "INR",
+              "USD"
+            ]
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "transactionId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "patch": {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "income",
+                  "expense"
+                ]
+              },
+              "amountMinor": {
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 1000000000000
+              },
+              "category": {
+                "type": "string",
+                "maxLength": 40
+              },
+              "note": {
+                "type": "string",
+                "maxLength": 80
+              },
+              "date": {
+                "type": "string",
+                "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$"
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "currency",
+          "expectedRevision",
+          "transactionId",
+          "patch"
+        ],
+        "additionalProperties": false
+      },
+      "idempotencyKeyRequired": true
+    },
+    {
+      "name": "tally_prepare_delete_transaction",
+      "description": "Freeze a delete preview; inspect it before committing.",
+      "scope": "transactions:write",
+      "effect": "prepare",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "currency": {
+            "type": "string",
+            "enum": [
+              "INR",
+              "USD"
+            ]
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "transactionId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          }
+        },
+        "required": [
+          "currency",
+          "expectedRevision",
+          "transactionId"
+        ],
+        "additionalProperties": false
+      },
+      "idempotencyKeyRequired": true
+    },
+    {
+      "name": "tally_delete_transaction",
+      "description": "Commit the exact frozen delete preview. When the preview returns approvalRequired=false, send planId, previewHash and expectedRevision directly; otherwise include an owner-approved approvalId.",
+      "scope": "transactions:write",
+      "effect": "write",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "currency": {
+            "type": "string",
+            "enum": [
+              "INR",
+              "USD"
+            ]
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "planId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "previewHash": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "approvalId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          }
+        },
+        "required": [
+          "currency",
+          "expectedRevision",
+          "planId"
+        ],
+        "additionalProperties": false
+      },
+      "idempotencyKeyRequired": true
+    },
+    {
+      "name": "tally_prepare_batch_changes",
+      "description": "Preview at most 100 atomic transaction changes.",
+      "scope": "transactions:write",
+      "effect": "prepare",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "currency": {
+            "type": "string",
+            "enum": [
+              "INR",
+              "USD"
+            ]
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "changes": {
+            "minItems": 1,
+            "maxItems": 100,
+            "type": "array",
+            "items": {
+              "oneOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "action": {
+                      "type": "string",
+                      "const": "create"
+                    },
+                    "transaction": {
+                      "type": "object",
+                      "properties": {
+                        "kind": {
+                          "type": "string",
+                          "enum": [
+                            "income",
+                            "expense"
+                          ]
+                        },
+                        "amountMinor": {
+                          "type": "integer",
+                          "exclusiveMinimum": 0,
+                          "maximum": 1000000000000
+                        },
+                        "category": {
+                          "type": "string",
+                          "maxLength": 40
+                        },
+                        "note": {
+                          "type": "string",
+                          "maxLength": 80
+                        },
+                        "date": {
+                          "type": "string",
+                          "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$"
+                        }
+                      },
+                      "required": [
+                        "kind",
+                        "amountMinor",
+                        "category",
+                        "note",
+                        "date"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "action",
+                    "transaction"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "action": {
+                      "type": "string",
+                      "const": "update"
+                    },
+                    "transactionId": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 128
+                    },
+                    "patch": {
+                      "type": "object",
+                      "properties": {
+                        "kind": {
+                          "type": "string",
+                          "enum": [
+                            "income",
+                            "expense"
+                          ]
+                        },
+                        "amountMinor": {
+                          "type": "integer",
+                          "exclusiveMinimum": 0,
+                          "maximum": 1000000000000
+                        },
+                        "category": {
+                          "type": "string",
+                          "maxLength": 40
+                        },
+                        "note": {
+                          "type": "string",
+                          "maxLength": 80
+                        },
+                        "date": {
+                          "type": "string",
+                          "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$"
+                        }
+                      },
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "action",
+                    "transactionId",
+                    "patch"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "action": {
+                      "type": "string",
+                      "const": "delete"
+                    },
+                    "transactionId": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 128
+                    }
+                  },
+                  "required": [
+                    "action",
+                    "transactionId"
+                  ],
+                  "additionalProperties": false
+                }
+              ]
+            }
+          }
+        },
+        "required": [
+          "currency",
+          "expectedRevision",
+          "changes"
+        ],
+        "additionalProperties": false
+      },
+      "idempotencyKeyRequired": true
+    },
+    {
+      "name": "tally_commit_batch_changes",
+      "description": "Commit the exact reviewed batch atomically. When the preview returns approvalRequired=false, send planId, previewHash and expectedRevision directly; otherwise include an owner-approved approvalId.",
+      "scope": "transactions:write",
+      "effect": "write",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "currency": {
+            "type": "string",
+            "enum": [
+              "INR",
+              "USD"
+            ]
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "planId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "previewHash": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "approvalId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          }
+        },
+        "required": [
+          "currency",
+          "expectedRevision",
+          "planId"
+        ],
+        "additionalProperties": false
+      },
+      "idempotencyKeyRequired": true
+    },
+    {
+      "name": "tally_get_month_settings",
+      "description": "Read a month's savings goal and category budgets.",
+      "scope": "summary:read",
+      "effect": "read",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "currency": {
+            "type": "string",
+            "enum": [
+              "INR",
+              "USD"
+            ]
+          },
+          "month": {
+            "type": "string",
+            "pattern": "^\\d{4}-(0[1-9]|1[0-2])$"
+          }
+        },
+        "required": [
+          "currency",
+          "month"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "tally_get_savings_goal",
+      "description": "Read a month's savings goal.",
+      "scope": "summary:read",
+      "effect": "read",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "currency": {
+            "type": "string",
+            "enum": [
+              "INR",
+              "USD"
+            ]
+          },
+          "month": {
+            "type": "string",
+            "pattern": "^\\d{4}-(0[1-9]|1[0-2])$"
+          }
+        },
+        "required": [
+          "currency",
+          "month"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "tally_set_savings_goal",
+      "description": "Set a positive monthly goal target and a name of at most 40 characters.",
+      "scope": "settings:write",
+      "effect": "write",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "currency": {
+            "type": "string",
+            "enum": [
+              "INR",
+              "USD"
+            ]
+          },
+          "month": {
+            "type": "string",
+            "pattern": "^\\d{4}-(0[1-9]|1[0-2])$"
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 40
+          },
+          "targetMinor": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 1000000000000
+          }
+        },
+        "required": [
+          "currency",
+          "month",
+          "expectedRevision",
+          "name",
+          "targetMinor"
+        ],
+        "additionalProperties": false
+      },
+      "idempotencyKeyRequired": true
+    },
+    {
+      "name": "tally_get_category_budget",
+      "description": "Read a category limit; null means no limit.",
+      "scope": "summary:read",
+      "effect": "read",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "currency": {
+            "type": "string",
+            "enum": [
+              "INR",
+              "USD"
+            ]
+          },
+          "month": {
+            "type": "string",
+            "pattern": "^\\d{4}-(0[1-9]|1[0-2])$"
+          },
+          "category": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 40
+          }
+        },
+        "required": [
+          "currency",
+          "month",
+          "category"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "tally_set_category_budget",
+      "description": "Set a positive category budget.",
+      "scope": "settings:write",
+      "effect": "write",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "currency": {
+            "type": "string",
+            "enum": [
+              "INR",
+              "USD"
+            ]
+          },
+          "month": {
+            "type": "string",
+            "pattern": "^\\d{4}-(0[1-9]|1[0-2])$"
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "category": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 40
+          },
+          "limitMinor": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 1000000000000
+          }
+        },
+        "required": [
+          "currency",
+          "month",
+          "expectedRevision",
+          "category",
+          "limitMinor"
+        ],
+        "additionalProperties": false
+      },
+      "idempotencyKeyRequired": true
+    },
+    {
+      "name": "tally_clear_category_budget",
+      "description": "Remove a category limit. Zero is not a valid budget.",
+      "scope": "settings:write",
+      "effect": "write",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "currency": {
+            "type": "string",
+            "enum": [
+              "INR",
+              "USD"
+            ]
+          },
+          "month": {
+            "type": "string",
+            "pattern": "^\\d{4}-(0[1-9]|1[0-2])$"
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "category": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 40
+          }
+        },
+        "required": [
+          "currency",
+          "month",
+          "expectedRevision",
+          "category"
+        ],
+        "additionalProperties": false
+      },
+      "idempotencyKeyRequired": true
+    },
+    {
+      "name": "tally_get_month_summary",
+      "description": "Calculate deterministic monthly totals; does not call an AI provider.",
+      "scope": "summary:read",
+      "effect": "read",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "currency": {
+            "type": "string",
+            "enum": [
+              "INR",
+              "USD"
+            ]
+          },
+          "month": {
+            "type": "string",
+            "pattern": "^\\d{4}-(0[1-9]|1[0-2])$"
+          }
+        },
+        "required": [
+          "currency",
+          "month"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "tally_get_category_totals",
+      "description": "Calculate monthly totals by expense category.",
+      "scope": "summary:read",
+      "effect": "read",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "currency": {
+            "type": "string",
+            "enum": [
+              "INR",
+              "USD"
+            ]
+          },
+          "month": {
+            "type": "string",
+            "pattern": "^\\d{4}-(0[1-9]|1[0-2])$"
+          }
+        },
+        "required": [
+          "currency",
+          "month"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "tally_get_budget_status",
+      "description": "Calculate budget and savings progress.",
+      "scope": "summary:read",
+      "effect": "read",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "currency": {
+            "type": "string",
+            "enum": [
+              "INR",
+              "USD"
+            ]
+          },
+          "month": {
+            "type": "string",
+            "pattern": "^\\d{4}-(0[1-9]|1[0-2])$"
+          }
+        },
+        "required": [
+          "currency",
+          "month"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "tally_stage_statement",
+      "description": "Stage a legacy budget-only CSV or text PDF; no account balance, counterpart matching or reconciliation effects. Upload via the private file endpoint; never pass a server path or URL.",
+      "scope": "imports:write",
+      "effect": "prepare",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "currency": {
+            "type": "string",
+            "enum": [
+              "INR",
+              "USD"
+            ]
+          },
+          "fileId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          }
+        },
+        "required": [
+          "currency",
+          "fileId"
+        ],
+        "additionalProperties": false
+      },
+      "idempotencyKeyRequired": true
+    },
+    {
+      "name": "tally_get_import",
+      "description": "Read paginated staged statement rows for correction; no ledger changes.",
+      "scope": "imports:write",
+      "effect": "read",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "currency": {
+            "type": "string",
+            "enum": [
+              "INR",
+              "USD"
+            ]
+          },
+          "importId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "limit": {
+            "default": 50,
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100
+          },
+          "cursor": {
+            "type": "string",
+            "maxLength": 2048
+          }
+        },
+        "required": [
+          "currency",
+          "importId",
+          "limit"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "tally_set_import_mapping",
+      "description": "Set explicit column and date mappings; invalidate prior previews.",
+      "scope": "imports:write",
+      "effect": "prepare",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "currency": {
+            "type": "string",
+            "enum": [
+              "INR",
+              "USD"
+            ]
+          },
+          "importId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "mapping": {
+            "type": "object",
+            "properties": {
+              "dateColumn": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "descriptionColumn": {
+                "anyOf": [
+                  {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "currencyColumn": {
+                "anyOf": [
+                  {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "dateFormat": {
+                "type": "string",
+                "enum": [
+                  "auto",
+                  "mdy",
+                  "dmy"
+                ]
+              },
+              "categoryColumn": {
+                "anyOf": [
+                  {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "amount": {
+                "oneOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "mode": {
+                        "type": "string",
+                        "const": "signed"
+                      },
+                      "amountColumn": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 9007199254740991
+                      },
+                      "positiveAmounts": {
+                        "type": "string",
+                        "enum": [
+                          "income",
+                          "expense"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "mode",
+                      "amountColumn",
+                      "positiveAmounts"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "mode": {
+                        "type": "string",
+                        "const": "debit-credit"
+                      },
+                      "debitColumn": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 9007199254740991
+                      },
+                      "creditColumn": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 9007199254740991
+                      }
+                    },
+                    "required": [
+                      "mode",
+                      "debitColumn",
+                      "creditColumn"
+                    ],
+                    "additionalProperties": false
+                  }
+                ]
+              }
+            },
+            "required": [
+              "dateColumn",
+              "descriptionColumn",
+              "currencyColumn",
+              "dateFormat",
+              "amount"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "currency",
+          "importId",
+          "mapping"
+        ],
+        "additionalProperties": false
+      },
+      "idempotencyKeyRequired": true
+    },
+    {
+      "name": "tally_correct_import_rows",
+      "description": "Correct up to 100 source rows, then preview again. Currency cells still undergo validation.",
+      "scope": "imports:write",
+      "effect": "prepare",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "currency": {
+            "type": "string",
+            "enum": [
+              "INR",
+              "USD"
+            ]
+          },
+          "importId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "corrections": {
+            "minItems": 1,
+            "maxItems": 100,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "rowNumber": {
+                  "type": "integer",
+                  "exclusiveMinimum": 0,
+                  "maximum": 9007199254740991
+                },
+                "values": {
+                  "maxItems": 100,
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "maxLength": 2000
+                  }
+                }
+              },
+              "required": [
+                "rowNumber",
+                "values"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "currency",
+          "importId",
+          "corrections"
+        ],
+        "additionalProperties": false
+      },
+      "idempotencyKeyRequired": true
+    },
+    {
+      "name": "tally_preview_import",
+      "description": "Freeze an import preview; invalid rows block commit, duplicates are excluded.",
+      "scope": "imports:write",
+      "effect": "prepare",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "currency": {
+            "type": "string",
+            "enum": [
+              "INR",
+              "USD"
+            ]
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "importId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          }
+        },
+        "required": [
+          "currency",
+          "expectedRevision",
+          "importId"
+        ],
+        "additionalProperties": false
+      },
+      "idempotencyKeyRequired": true
+    },
+    {
+      "name": "tally_commit_import",
+      "description": "Commit the exact reviewed import once; duplicates remain excluded. When the preview returns approvalRequired=false, send planId, previewHash and expectedRevision directly; otherwise include an owner-approved approvalId.",
+      "scope": "imports:write",
+      "effect": "write",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "currency": {
+            "type": "string",
+            "enum": [
+              "INR",
+              "USD"
+            ]
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "planId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "previewHash": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "approvalId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          }
+        },
+        "required": [
+          "currency",
+          "expectedRevision",
+          "planId"
+        ],
+        "additionalProperties": false
+      },
+      "idempotencyKeyRequired": true
+    },
+    {
+      "name": "tally_cancel_import",
+      "description": "Cancel a draft; committed entries are not reversed.",
+      "scope": "imports:write",
+      "effect": "write",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "currency": {
+            "type": "string",
+            "enum": [
+              "INR",
+              "USD"
+            ]
+          },
+          "importId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          }
+        },
+        "required": [
+          "currency",
+          "importId"
+        ],
+        "additionalProperties": false
+      },
+      "idempotencyKeyRequired": true
+    },
+    {
+      "name": "tally_export_transactions_csv",
+      "description": "Create an expiring private CSV download handle.",
+      "scope": "exports:read",
+      "effect": "prepare",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "currency": {
+            "type": "string",
+            "enum": [
+              "INR",
+              "USD"
+            ]
+          },
+          "month": {
+            "type": "string",
+            "pattern": "^\\d{4}-(0[1-9]|1[0-2])$"
+          }
+        },
+        "required": [
+          "currency"
+        ],
+        "additionalProperties": false
+      },
+      "idempotencyKeyRequired": true
+    },
+    {
+      "name": "tally_export_monthly_pdf",
+      "description": "Create a Tally-branded monthly PDF from the canonical ledger.",
+      "scope": "exports:read",
+      "effect": "prepare",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "currency": {
+            "type": "string",
+            "enum": [
+              "INR",
+              "USD"
+            ]
+          },
+          "month": {
+            "type": "string",
+            "pattern": "^\\d{4}-(0[1-9]|1[0-2])$"
+          }
+        },
+        "required": [
+          "currency",
+          "month"
+        ],
+        "additionalProperties": false
+      },
+      "idempotencyKeyRequired": true
+    },
+    {
+      "name": "tally_export_backup",
+      "description": "Create a versioned JSON ledger backup, keeping its currency explicit.",
+      "scope": "exports:read",
+      "effect": "prepare",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "currency": {
+            "type": "string",
+            "enum": [
+              "INR",
+              "USD"
+            ]
+          }
+        },
+        "required": [
+          "currency"
+        ],
+        "additionalProperties": false
+      },
+      "idempotencyKeyRequired": true
+    },
+    {
+      "name": "tally_get_file",
+      "description": "Read metadata and private download path for an owned file handle, never arbitrary filesystem paths.",
+      "scope": "files:read",
+      "effect": "read",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "currency": {
+            "type": "string",
+            "enum": [
+              "INR",
+              "USD"
+            ]
+          },
+          "fileId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          }
+        },
+        "required": [
+          "currency",
+          "fileId"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "tally_preview_restore",
+      "description": "Validate an uploaded backup and freeze replacement of this currency only. Current data is preserved in a private backup at commit.",
+      "scope": "restore:write",
+      "effect": "prepare",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "currency": {
+            "type": "string",
+            "enum": [
+              "INR",
+              "USD"
+            ]
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "fileId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          }
+        },
+        "required": [
+          "currency",
+          "expectedRevision",
+          "fileId"
+        ],
+        "additionalProperties": false
+      },
+      "idempotencyKeyRequired": true
+    },
+    {
+      "name": "tally_commit_restore",
+      "description": "Commit the exact frozen restore; preserve the other ledger. When the preview returns approvalRequired=false, send planId, previewHash and expectedRevision directly; otherwise include an owner-approved approvalId.",
+      "scope": "restore:write",
+      "effect": "write",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "currency": {
+            "type": "string",
+            "enum": [
+              "INR",
+              "USD"
+            ]
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "planId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "previewHash": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "approvalId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          }
+        },
+        "required": [
+          "currency",
+          "expectedRevision",
+          "planId"
+        ],
+        "additionalProperties": false
+      },
+      "idempotencyKeyRequired": true
+    },
+    {
+      "name": "tally_get_recovery_status",
+      "description": "Read whether uploaded recovery material is available. Browser-local data must be explicitly uploaded.",
+      "scope": "recovery:read",
+      "effect": "read",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "currency": {
+            "type": "string",
+            "enum": [
+              "INR",
+              "USD"
+            ]
+          }
+        },
+        "required": [
+          "currency"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "tally_export_raw_recovery",
+      "description": "Copy an owned uploaded raw recovery file into a short-lived download handle.",
+      "scope": "recovery:read",
+      "effect": "prepare",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "currency": {
+            "type": "string",
+            "enum": [
+              "INR",
+              "USD"
+            ]
+          },
+          "fileId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          }
+        },
+        "required": [
+          "currency",
+          "fileId"
+        ],
+        "additionalProperties": false
+      },
+      "idempotencyKeyRequired": true
+    },
+    {
+      "name": "tally_verify_ledger_integrity",
+      "description": "Validate stored transaction dates, categories, ids and amounts.",
+      "scope": "summary:read",
+      "effect": "read",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "currency": {
+            "type": "string",
+            "enum": [
+              "INR",
+              "USD"
+            ]
+          }
+        },
+        "required": [
+          "currency"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "tally_prepare_clear_month",
+      "description": "Freeze deletion of all entries in one month.",
+      "scope": "transactions:write",
+      "effect": "prepare",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "currency": {
+            "type": "string",
+            "enum": [
+              "INR",
+              "USD"
+            ]
+          },
+          "month": {
+            "type": "string",
+            "pattern": "^\\d{4}-(0[1-9]|1[0-2])$"
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          }
+        },
+        "required": [
+          "currency",
+          "month",
+          "expectedRevision"
+        ],
+        "additionalProperties": false
+      },
+      "idempotencyKeyRequired": true
+    },
+    {
+      "name": "tally_clear_month",
+      "description": "Clear only entries in the reviewed month preview. When the preview returns approvalRequired=false, send planId, previewHash and expectedRevision directly; otherwise include an owner-approved approvalId.",
+      "scope": "transactions:write",
+      "effect": "write",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "currency": {
+            "type": "string",
+            "enum": [
+              "INR",
+              "USD"
+            ]
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "planId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "previewHash": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "approvalId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          }
+        },
+        "required": [
+          "currency",
+          "expectedRevision",
+          "planId"
+        ],
+        "additionalProperties": false
+      },
+      "idempotencyKeyRequired": true
+    },
+    {
+      "name": "tally_prepare_remove_sample_entries",
+      "description": "Freeze removal of entries explicitly marked as samples.",
+      "scope": "transactions:write",
+      "effect": "prepare",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "currency": {
+            "type": "string",
+            "enum": [
+              "INR",
+              "USD"
+            ]
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          }
+        },
+        "required": [
+          "currency",
+          "expectedRevision"
+        ],
+        "additionalProperties": false
+      },
+      "idempotencyKeyRequired": true
+    },
+    {
+      "name": "tally_remove_sample_entries",
+      "description": "Remove the reviewed sample entries only. When the preview returns approvalRequired=false, send planId, previewHash and expectedRevision directly; otherwise include an owner-approved approvalId.",
+      "scope": "transactions:write",
+      "effect": "write",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "currency": {
+            "type": "string",
+            "enum": [
+              "INR",
+              "USD"
+            ]
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "planId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "previewHash": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "approvalId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          }
+        },
+        "required": [
+          "currency",
+          "expectedRevision",
+          "planId"
+        ],
+        "additionalProperties": false
+      },
+      "idempotencyKeyRequired": true
+    },
+    {
+      "name": "tally_get_ai_status",
+      "description": "Read optional provider readiness and spending limits, without configuration secrets.",
+      "scope": "summary:read",
+      "effect": "read",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "tally_create_analysis_context",
+      "description": "Freeze aggregate monthly context for external-provider consent. No descriptions or custom goal names are included.",
+      "scope": "ai:ask",
+      "effect": "prepare",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "currency": {
+            "type": "string",
+            "enum": [
+              "INR",
+              "USD"
+            ]
+          },
+          "month": {
+            "type": "string",
+            "pattern": "^\\d{4}-(0[1-9]|1[0-2])$"
+          },
+          "question": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500
+          }
+        },
+        "required": [
+          "currency",
+          "month",
+          "question"
+        ],
+        "additionalProperties": false
+      },
+      "idempotencyKeyRequired": true
+    },
+    {
+      "name": "tally_ask_spending_question",
+      "description": "Start one bounded provider request using a trusted consent approval. Requires configured provider; never retries automatically.",
+      "scope": "ai:ask",
+      "effect": "external",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "currency": {
+            "type": "string",
+            "enum": [
+              "INR",
+              "USD"
+            ]
+          },
+          "contextId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "approvalId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "question": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500
+          }
+        },
+        "required": [
+          "currency",
+          "contextId",
+          "approvalId",
+          "question"
+        ],
+        "additionalProperties": false
+      },
+      "idempotencyKeyRequired": true
+    },
+    {
+      "name": "tally_get_ai_request",
+      "description": "Read a provider request result or interrupted state.",
+      "scope": "ai:ask",
+      "effect": "read",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "currency": {
+            "type": "string",
+            "enum": [
+              "INR",
+              "USD"
+            ]
+          },
+          "requestId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          }
+        },
+        "required": [
+          "currency",
+          "requestId"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "tally_cancel_ai_request",
+      "description": "Cancel an in-flight provider call; a completed request remains completed.",
+      "scope": "ai:ask",
+      "effect": "write",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "currency": {
+            "type": "string",
+            "enum": [
+              "INR",
+              "USD"
+            ]
+          },
+          "requestId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          }
+        },
+        "required": [
+          "currency",
+          "requestId"
+        ],
+        "additionalProperties": false
+      },
+      "idempotencyKeyRequired": true
+    },
+    {
+      "name": "tally_request_approval",
+      "description": "Request trusted owner approval for an existing preview. This operation never grants approval.",
+      "scope": "approvals:request",
+      "effect": "prepare",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "currency": {
+            "type": "string",
+            "enum": [
+              "INR",
+              "USD"
+            ]
+          },
+          "planId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          }
+        },
+        "required": [
+          "currency",
+          "planId"
+        ],
+        "additionalProperties": false
+      },
+      "idempotencyKeyRequired": true
+    },
+    {
+      "name": "tally_get_approval",
+      "description": "Read approval status for your own operation.",
+      "scope": "approvals:request",
+      "effect": "read",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "currency": {
+            "type": "string",
+            "enum": [
+              "INR",
+              "USD"
+            ]
+          },
+          "approvalId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          }
+        },
+        "required": [
+          "currency",
+          "approvalId"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "tally_get_operation",
+      "description": "Read your operation/preview, or its durable commit receipt.",
+      "scope": "summary:read",
+      "effect": "read",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "currency": {
+            "type": "string",
+            "enum": [
+              "INR",
+              "USD"
+            ]
+          },
+          "operationId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          }
+        },
+        "required": [
+          "currency",
+          "operationId"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "tally_cancel_operation",
+      "description": "Cancel an uncommitted preview. A committed receipt is returned unchanged.",
+      "scope": "approvals:request",
+      "effect": "write",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "currency": {
+            "type": "string",
+            "enum": [
+              "INR",
+              "USD"
+            ]
+          },
+          "operationId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          }
+        },
+        "required": [
+          "currency",
+          "operationId"
+        ],
+        "additionalProperties": false
+      },
+      "idempotencyKeyRequired": true
+    },
+    {
+      "name": "tally_list_audit_events",
+      "description": "Read paginated audit metadata for this currency; does not disclose transaction descriptions.",
+      "scope": "audit:read",
+      "effect": "read",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "currency": {
+            "type": "string",
+            "enum": [
+              "INR",
+              "USD"
+            ]
+          },
+          "limit": {
+            "default": 50,
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100
+          },
+          "cursor": {
+            "type": "string",
+            "maxLength": 2048
+          }
+        },
+        "required": [
+          "currency",
+          "limit"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "tally_get_operation_receipt",
+      "description": "Read the immutable receipt of your committed operation after a disconnect.",
+      "scope": "summary:read",
+      "effect": "read",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "currency": {
+            "type": "string",
+            "enum": [
+              "INR",
+              "USD"
+            ]
+          },
+          "operationId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          }
+        },
+        "required": [
+          "currency",
+          "operationId"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "tally_prepare_undo",
+      "description": "Preview a compensating operation, allowed only when the ledger still matches the committed after-state.",
+      "scope": "transactions:write",
+      "effect": "prepare",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "currency": {
+            "type": "string",
+            "enum": [
+              "INR",
+              "USD"
+            ]
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "operationId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          }
+        },
+        "required": [
+          "currency",
+          "expectedRevision",
+          "operationId"
+        ],
+        "additionalProperties": false
+      },
+      "idempotencyKeyRequired": true
+    },
+    {
+      "name": "tally_commit_undo",
+      "description": "Commit a reviewed compensating operation; original audit events remain intact. When the preview returns approvalRequired=false, send planId, previewHash and expectedRevision directly; otherwise include an owner-approved approvalId.",
+      "scope": "transactions:write",
+      "effect": "write",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "currency": {
+            "type": "string",
+            "enum": [
+              "INR",
+              "USD"
+            ]
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "planId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "previewHash": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "approvalId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          }
+        },
+        "required": [
+          "currency",
+          "expectedRevision",
+          "planId"
+        ],
+        "additionalProperties": false
+      },
+      "idempotencyKeyRequired": true
+    },
+    {
+      "name": "tally_list_accounts",
+      "description": "List bank, cash, card and loan accounts. Legacy budget entries are separate.",
+      "scope": "accounts:read",
+      "effect": "read",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "currency": {
+            "type": "string",
+            "enum": [
+              "INR",
+              "USD"
+            ]
+          }
+        },
+        "required": [
+          "currency"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "tally_get_account",
+      "description": "Read account metadata and reviewed opening cutoff.",
+      "scope": "accounts:read",
+      "effect": "read",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "currency": {
+            "type": "string",
+            "enum": [
+              "INR",
+              "USD"
+            ]
+          },
+          "accountId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          }
+        },
+        "required": [
+          "currency",
+          "accountId"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "tally_prepare_account",
+      "description": "Prepare an account and optional reviewed opening balance; no postings until reviewed commit.",
+      "scope": "accounts:write",
+      "effect": "prepare",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "currency": {
+            "type": "string",
+            "enum": [
+              "INR",
+              "USD"
+            ]
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "bank",
+              "cash",
+              "credit_card",
+              "loan"
+            ]
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80
+          },
+          "opening": {
+            "type": "object",
+            "properties": {
+              "date": {
+                "type": "string",
+                "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$"
+              },
+              "timing": {
+                "type": "string",
+                "enum": [
+                  "start_of_day",
+                  "end_of_day"
+                ]
+              },
+              "balanceMinor": {
+                "type": "integer",
+                "minimum": -1000000000000,
+                "maximum": 1000000000000
+              }
+            },
+            "required": [
+              "date",
+              "timing",
+              "balanceMinor"
+            ],
+            "additionalProperties": false
+          },
+          "institution": {
+            "type": "string",
+            "maxLength": 80
+          },
+          "lastFour": {
+            "type": "string",
+            "pattern": "^\\d{4}$"
+          },
+          "cardTerms": {
+            "type": "object",
+            "properties": {
+              "creditLimitMinor": {
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 1000000000000
+              }
+            },
+            "required": [
+              "creditLimitMinor"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "currency",
+          "expectedRevision",
+          "type",
+          "name"
+        ],
+        "additionalProperties": false
+      },
+      "idempotencyKeyRequired": true
+    },
+    {
+      "name": "tally_prepare_opening_balance",
+      "description": "Prepare the first opening; overlapping historical movements require migration review.",
+      "scope": "accounts:write",
+      "effect": "prepare",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "currency": {
+            "type": "string",
+            "enum": [
+              "INR",
+              "USD"
+            ]
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "accountId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "opening": {
+            "type": "object",
+            "properties": {
+              "date": {
+                "type": "string",
+                "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$"
+              },
+              "timing": {
+                "type": "string",
+                "enum": [
+                  "start_of_day",
+                  "end_of_day"
+                ]
+              },
+              "balanceMinor": {
+                "type": "integer",
+                "minimum": -1000000000000,
+                "maximum": 1000000000000
+              }
+            },
+            "required": [
+              "date",
+              "timing",
+              "balanceMinor"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "currency",
+          "expectedRevision",
+          "accountId",
+          "opening"
+        ],
+        "additionalProperties": false
+      },
+      "idempotencyKeyRequired": true
+    },
+    {
+      "name": "tally_prepare_account_update",
+      "description": "Prepare account rename/archive/restore; type/currency and history stay immutable.",
+      "scope": "accounts:write",
+      "effect": "prepare",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "currency": {
+            "type": "string",
+            "enum": [
+              "INR",
+              "USD"
+            ]
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "accountId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80
+          },
+          "archived": {
+            "type": "boolean"
+          },
+          "institution": {
+            "type": "string",
+            "maxLength": 80
+          },
+          "lastFour": {
+            "type": "string",
+            "pattern": "^\\d{4}$"
+          },
+          "cardTerms": {
+            "type": "object",
+            "properties": {
+              "creditLimitMinor": {
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 1000000000000
+              }
+            },
+            "required": [
+              "creditLimitMinor"
+            ],
+            "additionalProperties": false
+          },
+          "cardBill": {
+            "type": "object",
+            "properties": {
+              "statementDate": {
+                "type": "string",
+                "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$"
+              },
+              "dueDate": {
+                "type": "string",
+                "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$"
+              },
+              "totalDueMinor": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 1000000000000
+              },
+              "minimumDueMinor": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 1000000000000
+              }
+            },
+            "required": [
+              "statementDate",
+              "dueDate",
+              "totalDueMinor",
+              "minimumDueMinor"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "currency",
+          "expectedRevision",
+          "accountId"
+        ],
+        "additionalProperties": false
+      },
+      "idempotencyKeyRequired": true
+    },
+    {
+      "name": "tally_prepare_opening_correction",
+      "description": "Prepare an explicit signed opening correction with a reason; never infer a plug from a closing-balance discrepancy.",
+      "scope": "accounts:write",
+      "effect": "prepare",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "currency": {
+            "type": "string",
+            "enum": [
+              "INR",
+              "USD"
+            ]
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "accountId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "date": {
+            "type": "string",
+            "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$"
+          },
+          "deltaMinor": {
+            "type": "integer",
+            "minimum": -1000000000000,
+            "maximum": 1000000000000
+          },
+          "note": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80
+          }
+        },
+        "required": [
+          "currency",
+          "expectedRevision",
+          "accountId",
+          "date",
+          "deltaMinor",
+          "note"
+        ],
+        "additionalProperties": false
+      },
+      "idempotencyKeyRequired": true
+    },
+    {
+      "name": "tally_commit_account_change",
+      "description": "Commit a reviewed account/opening change atomically with receipt and audit. When the preview returns approvalRequired=false, send planId, previewHash and expectedRevision directly; otherwise include an owner-approved approvalId.",
+      "scope": "accounts:write",
+      "effect": "write",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "currency": {
+            "type": "string",
+            "enum": [
+              "INR",
+              "USD"
+            ]
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "planId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "previewHash": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "approvalId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          }
+        },
+        "required": [
+          "currency",
+          "expectedRevision",
+          "planId"
+        ],
+        "additionalProperties": false
+      },
+      "idempotencyKeyRequired": true
+    },
+    {
+      "name": "tally_prepare_journal_event",
+      "description": "Prepare balanced income, purchases, transfer/ATM, card settlement, loan principal/interest or refund; category allocations are separate from accounts.",
+      "scope": "journal:write",
+      "effect": "prepare",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "currency": {
+            "type": "string",
+            "enum": [
+              "INR",
+              "USD"
+            ]
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "event": {
+            "oneOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "date": {
+                    "type": "string",
+                    "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$"
+                  },
+                  "note": {
+                    "default": "",
+                    "type": "string",
+                    "maxLength": 80
+                  },
+                  "kind": {
+                    "type": "string",
+                    "const": "income"
+                  },
+                  "accountId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128
+                  },
+                  "allocations": {
+                    "minItems": 1,
+                    "maxItems": 50,
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "categoryId": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 128
+                        },
+                        "amountMinor": {
+                          "type": "integer",
+                          "exclusiveMinimum": 0,
+                          "maximum": 1000000000000
+                        }
+                      },
+                      "required": [
+                        "categoryId",
+                        "amountMinor"
+                      ],
+                      "additionalProperties": false
+                    }
+                  }
+                },
+                "required": [
+                  "date",
+                  "note",
+                  "kind",
+                  "accountId",
+                  "allocations"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "date": {
+                    "type": "string",
+                    "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$"
+                  },
+                  "note": {
+                    "default": "",
+                    "type": "string",
+                    "maxLength": 80
+                  },
+                  "kind": {
+                    "type": "string",
+                    "const": "expense"
+                  },
+                  "accountId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128
+                  },
+                  "allocations": {
+                    "minItems": 1,
+                    "maxItems": 50,
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "categoryId": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 128
+                        },
+                        "amountMinor": {
+                          "type": "integer",
+                          "exclusiveMinimum": 0,
+                          "maximum": 1000000000000
+                        }
+                      },
+                      "required": [
+                        "categoryId",
+                        "amountMinor"
+                      ],
+                      "additionalProperties": false
+                    }
+                  }
+                },
+                "required": [
+                  "date",
+                  "note",
+                  "kind",
+                  "accountId",
+                  "allocations"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "date": {
+                    "type": "string",
+                    "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$"
+                  },
+                  "note": {
+                    "default": "",
+                    "type": "string",
+                    "maxLength": 80
+                  },
+                  "kind": {
+                    "type": "string",
+                    "const": "transfer"
+                  },
+                  "fromAccountId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128
+                  },
+                  "toAccountId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128
+                  },
+                  "amountMinor": {
+                    "type": "integer",
+                    "exclusiveMinimum": 0,
+                    "maximum": 1000000000000
+                  }
+                },
+                "required": [
+                  "date",
+                  "note",
+                  "kind",
+                  "fromAccountId",
+                  "toAccountId",
+                  "amountMinor"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "date": {
+                    "type": "string",
+                    "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$"
+                  },
+                  "note": {
+                    "default": "",
+                    "type": "string",
+                    "maxLength": 80
+                  },
+                  "kind": {
+                    "type": "string",
+                    "const": "card_payment"
+                  },
+                  "fromAccountId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128
+                  },
+                  "toAccountId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128
+                  },
+                  "amountMinor": {
+                    "type": "integer",
+                    "exclusiveMinimum": 0,
+                    "maximum": 1000000000000
+                  }
+                },
+                "required": [
+                  "date",
+                  "note",
+                  "kind",
+                  "fromAccountId",
+                  "toAccountId",
+                  "amountMinor"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "date": {
+                    "type": "string",
+                    "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$"
+                  },
+                  "note": {
+                    "default": "",
+                    "type": "string",
+                    "maxLength": 80
+                  },
+                  "kind": {
+                    "type": "string",
+                    "const": "loan_borrowing"
+                  },
+                  "assetAccountId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128
+                  },
+                  "loanAccountId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128
+                  },
+                  "amountMinor": {
+                    "type": "integer",
+                    "exclusiveMinimum": 0,
+                    "maximum": 1000000000000
+                  }
+                },
+                "required": [
+                  "date",
+                  "note",
+                  "kind",
+                  "assetAccountId",
+                  "loanAccountId",
+                  "amountMinor"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "date": {
+                    "type": "string",
+                    "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$"
+                  },
+                  "note": {
+                    "default": "",
+                    "type": "string",
+                    "maxLength": 80
+                  },
+                  "kind": {
+                    "type": "string",
+                    "const": "loan_payment"
+                  },
+                  "assetAccountId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128
+                  },
+                  "loanAccountId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128
+                  },
+                  "principalMinor": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 1000000000000
+                  },
+                  "allocations": {
+                    "minItems": 1,
+                    "maxItems": 50,
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "categoryId": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 128
+                        },
+                        "amountMinor": {
+                          "type": "integer",
+                          "exclusiveMinimum": 0,
+                          "maximum": 1000000000000
+                        },
+                        "component": {
+                          "type": "string",
+                          "enum": [
+                            "interest",
+                            "fee"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "categoryId",
+                        "amountMinor",
+                        "component"
+                      ],
+                      "additionalProperties": false
+                    }
+                  }
+                },
+                "required": [
+                  "date",
+                  "note",
+                  "kind",
+                  "assetAccountId",
+                  "loanAccountId",
+                  "principalMinor"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "date": {
+                    "type": "string",
+                    "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$"
+                  },
+                  "note": {
+                    "default": "",
+                    "type": "string",
+                    "maxLength": 80
+                  },
+                  "kind": {
+                    "type": "string",
+                    "const": "refund"
+                  },
+                  "accountId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128
+                  },
+                  "originalEventId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128
+                  },
+                  "allocations": {
+                    "minItems": 1,
+                    "maxItems": 50,
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "categoryId": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 128
+                        },
+                        "amountMinor": {
+                          "type": "integer",
+                          "exclusiveMinimum": 0,
+                          "maximum": 1000000000000
+                        }
+                      },
+                      "required": [
+                        "categoryId",
+                        "amountMinor"
+                      ],
+                      "additionalProperties": false
+                    }
+                  }
+                },
+                "required": [
+                  "date",
+                  "note",
+                  "kind",
+                  "accountId",
+                  "originalEventId",
+                  "allocations"
+                ],
+                "additionalProperties": false
+              }
+            ]
+          }
+        },
+        "required": [
+          "currency",
+          "expectedRevision",
+          "event"
+        ],
+        "additionalProperties": false
+      },
+      "idempotencyKeyRequired": true
+    },
+    {
+      "name": "tally_prepare_journal_reversal",
+      "description": "Prepare compensating postings; never delete or silently rewrite a posted journal.",
+      "scope": "journal:write",
+      "effect": "prepare",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "currency": {
+            "type": "string",
+            "enum": [
+              "INR",
+              "USD"
+            ]
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "eventId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "date": {
+            "type": "string",
+            "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$"
+          },
+          "note": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80
+          }
+        },
+        "required": [
+          "currency",
+          "expectedRevision",
+          "eventId",
+          "date",
+          "note"
+        ],
+        "additionalProperties": false
+      },
+      "idempotencyKeyRequired": true
+    },
+    {
+      "name": "tally_commit_journal_event",
+      "description": "Commit the exact reviewed journal once; principal/transfers are not extra income or spending. When the preview returns approvalRequired=false, send planId, previewHash and expectedRevision directly; otherwise include an owner-approved approvalId.",
+      "scope": "journal:write",
+      "effect": "write",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "currency": {
+            "type": "string",
+            "enum": [
+              "INR",
+              "USD"
+            ]
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "planId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "previewHash": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "approvalId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          }
+        },
+        "required": [
+          "currency",
+          "expectedRevision",
+          "planId"
+        ],
+        "additionalProperties": false
+      },
+      "idempotencyKeyRequired": true
+    },
+    {
+      "name": "tally_list_journal_events",
+      "description": "Read paginated account journals, separate from unassigned legacy transactions.",
+      "scope": "journal:read",
+      "effect": "read",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "currency": {
+            "type": "string",
+            "enum": [
+              "INR",
+              "USD"
+            ]
+          },
+          "limit": {
+            "default": 50,
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100
+          },
+          "cursor": {
+            "type": "string",
+            "maxLength": 2048
+          },
+          "from": {
+            "type": "string",
+            "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$"
+          },
+          "to": {
+            "type": "string",
+            "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$"
+          }
+        },
+        "required": [
+          "currency",
+          "limit"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "tally_get_journal_event",
+      "description": "Read a posted event and all balanced postings.",
+      "scope": "journal:read",
+      "effect": "read",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "currency": {
+            "type": "string",
+            "enum": [
+              "INR",
+              "USD"
+            ]
+          },
+          "eventId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          }
+        },
+        "required": [
+          "currency",
+          "eventId"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "tally_get_account_balance",
+      "description": "Read recorded balance at a date; unknown opening means null, not zero. Dated statement metadata is included when Phase B is enabled.",
+      "scope": "accounts:read",
+      "effect": "read",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "currency": {
+            "type": "string",
+            "enum": [
+              "INR",
+              "USD"
+            ]
+          },
+          "accountId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "asOf": {
+            "type": "string",
+            "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$"
+          }
+        },
+        "required": [
+          "currency",
+          "accountId",
+          "asOf"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "tally_get_financial_position",
+      "description": "Read scoped assets/liabilities; net position is unknown when openings are missing. No live bank data.",
+      "scope": "accounts:read",
+      "effect": "read",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "currency": {
+            "type": "string",
+            "enum": [
+              "INR",
+              "USD"
+            ]
+          },
+          "asOf": {
+            "type": "string",
+            "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$"
+          }
+        },
+        "required": [
+          "currency",
+          "asOf"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "tally_get_cash_flow",
+      "description": "Calculate dated bank/cash movement; transfers cancel in aggregate and openings are excluded.",
+      "scope": "accounts:read",
+      "effect": "read",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "currency": {
+            "type": "string",
+            "enum": [
+              "INR",
+              "USD"
+            ]
+          },
+          "from": {
+            "type": "string",
+            "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$"
+          },
+          "to": {
+            "type": "string",
+            "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$"
+          }
+        },
+        "required": [
+          "currency",
+          "from",
+          "to"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "tally_get_income_expense_report",
+      "description": "Calculate dated journal income and net expense; legacy entries remain excluded until reviewed migration.",
+      "scope": "accounts:read",
+      "effect": "read",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "currency": {
+            "type": "string",
+            "enum": [
+              "INR",
+              "USD"
+            ]
+          },
+          "from": {
+            "type": "string",
+            "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$"
+          },
+          "to": {
+            "type": "string",
+            "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$"
+          }
+        },
+        "required": [
+          "currency",
+          "from",
+          "to"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "tally_export_accounting_backup",
+      "description": "Export account metadata and immutable journals; does not restore or migrate legacy budget entries.",
+      "scope": "exports:read",
+      "effect": "prepare",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "currency": {
+            "type": "string",
+            "enum": [
+              "INR",
+              "USD"
+            ]
+          }
+        },
+        "required": [
+          "currency"
+        ],
+        "additionalProperties": false
+      },
+      "idempotencyKeyRequired": true
+    },
+    {
+      "name": "tally_get_investment_portfolio",
+      "description": "Read manual mutual fund, gold, stock and RD positions at a date, separate from account journals; unknown values stay unknown.",
+      "scope": "accounts:read",
+      "effect": "read",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "currency": {
+            "type": "string",
+            "enum": [
+              "INR",
+              "USD"
+            ]
+          },
+          "asOf": {
+            "type": "string",
+            "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$"
+          },
+          "accountId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          }
+        },
+        "required": [
+          "currency",
+          "asOf"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "tally_list_investment_valuations",
+      "description": "Read immutable dated position observations, including corrections, with revision-bound paging.",
+      "scope": "accounts:read",
+      "effect": "read",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "currency": {
+            "type": "string",
+            "enum": [
+              "INR",
+              "USD"
+            ]
+          },
+          "holdingId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "limit": {
+            "default": 50,
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100
+          },
+          "cursor": {
+            "type": "string",
+            "maxLength": 2048
+          }
+        },
+        "required": [
+          "currency",
+          "holdingId",
+          "limit"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "tally_prepare_investment_change",
+      "description": "Preview an investment account/holding, dated manual valuation or archive/restore. No bank posting, live quote or automatic trade.",
+      "scope": "accounts:write",
+      "effect": "prepare",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "currency": {
+            "type": "string",
+            "enum": [
+              "INR",
+              "USD"
+            ]
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "change": {
+            "oneOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "action": {
+                    "type": "string",
+                    "const": "account"
+                  },
+                  "name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 80
+                  },
+                  "institution": {
+                    "default": "",
+                    "type": "string",
+                    "maxLength": 80
+                  }
+                },
+                "required": [
+                  "action",
+                  "name",
+                  "institution"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "action": {
+                    "type": "string",
+                    "const": "holding"
+                  },
+                  "accountId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128
+                  },
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "mutual_fund",
+                      "gold",
+                      "stock",
+                      "recurring_deposit"
+                    ]
+                  },
+                  "name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 80
+                  },
+                  "identifier": {
+                    "default": "",
+                    "type": "string",
+                    "maxLength": 80
+                  },
+                  "valuation": {
+                    "type": "object",
+                    "properties": {
+                      "date": {
+                        "type": "string",
+                        "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$"
+                      },
+                      "quantity": {
+                        "default": "0",
+                        "type": "string",
+                        "pattern": "^\\d{1,12}(\\.\\d{1,8})?$"
+                      },
+                      "costMinor": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 1000000000000
+                      },
+                      "valueMinor": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 1000000000000
+                      },
+                      "note": {
+                        "default": "",
+                        "type": "string",
+                        "maxLength": 500
+                      },
+                      "rd": {
+                        "type": "object",
+                        "properties": {
+                          "instalmentMinor": {
+                            "type": "integer",
+                            "exclusiveMinimum": 0,
+                            "maximum": 1000000000000
+                          },
+                          "maturityDate": {
+                            "type": "string",
+                            "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$"
+                          },
+                          "expectedMaturityMinor": {
+                            "type": "integer",
+                            "exclusiveMinimum": 0,
+                            "maximum": 1000000000000
+                          }
+                        },
+                        "required": [
+                          "instalmentMinor",
+                          "maturityDate"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "required": [
+                      "date",
+                      "quantity",
+                      "costMinor",
+                      "valueMinor",
+                      "note"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "required": [
+                  "action",
+                  "accountId",
+                  "type",
+                  "name",
+                  "identifier",
+                  "valuation"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "action": {
+                    "type": "string",
+                    "const": "valuation"
+                  },
+                  "holdingId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128
+                  },
+                  "valuation": {
+                    "type": "object",
+                    "properties": {
+                      "date": {
+                        "type": "string",
+                        "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$"
+                      },
+                      "quantity": {
+                        "default": "0",
+                        "type": "string",
+                        "pattern": "^\\d{1,12}(\\.\\d{1,8})?$"
+                      },
+                      "costMinor": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 1000000000000
+                      },
+                      "valueMinor": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 1000000000000
+                      },
+                      "note": {
+                        "default": "",
+                        "type": "string",
+                        "maxLength": 500
+                      },
+                      "rd": {
+                        "type": "object",
+                        "properties": {
+                          "instalmentMinor": {
+                            "type": "integer",
+                            "exclusiveMinimum": 0,
+                            "maximum": 1000000000000
+                          },
+                          "maturityDate": {
+                            "type": "string",
+                            "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$"
+                          },
+                          "expectedMaturityMinor": {
+                            "type": "integer",
+                            "exclusiveMinimum": 0,
+                            "maximum": 1000000000000
+                          }
+                        },
+                        "required": [
+                          "instalmentMinor",
+                          "maturityDate"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "required": [
+                      "date",
+                      "quantity",
+                      "costMinor",
+                      "valueMinor",
+                      "note"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "required": [
+                  "action",
+                  "holdingId",
+                  "valuation"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "action": {
+                    "type": "string",
+                    "const": "archive_account"
+                  },
+                  "accountId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128
+                  },
+                  "archived": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "action",
+                  "accountId",
+                  "archived"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "action": {
+                    "type": "string",
+                    "const": "archive_holding"
+                  },
+                  "holdingId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128
+                  },
+                  "archived": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "action",
+                  "holdingId",
+                  "archived"
+                ],
+                "additionalProperties": false
+              }
+            ]
+          }
+        },
+        "required": [
+          "currency",
+          "expectedRevision",
+          "change"
+        ],
+        "additionalProperties": false
+      },
+      "idempotencyKeyRequired": true
+    },
+    {
+      "name": "tally_commit_investment_change",
+      "description": "Commit the exact frozen investment preview once with revision, hash, receipt and audit checks. When the preview returns approvalRequired=false, send planId, previewHash and expectedRevision directly; otherwise include an owner-approved approvalId.",
+      "scope": "accounts:write",
+      "effect": "write",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "currency": {
+            "type": "string",
+            "enum": [
+              "INR",
+              "USD"
+            ]
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "planId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "previewHash": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "approvalId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          }
+        },
+        "required": [
+          "currency",
+          "expectedRevision",
+          "planId"
+        ],
+        "additionalProperties": false
+      },
+      "idempotencyKeyRequired": true
+    },
+    {
+      "name": "tally_stage_account_statement",
+      "description": "Retain selected CSV/text-PDF bytes and account/period metadata privately; stage only, no financial posting.",
+      "scope": "statements:write",
+      "effect": "write",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "currency": {
+            "type": "string",
+            "enum": [
+              "INR",
+              "USD"
+            ]
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "accountId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "fileId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "periodFrom": {
+            "type": "string",
+            "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$"
+          },
+          "periodTo": {
+            "type": "string",
+            "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$"
+          },
+          "openingMinor": {
+            "type": "integer",
+            "minimum": -1000000000000,
+            "maximum": 1000000000000
+          },
+          "closingMinor": {
+            "type": "integer",
+            "minimum": -1000000000000,
+            "maximum": 1000000000000
+          },
+          "closingTiming": {
+            "default": "end_of_day",
+            "type": "string",
+            "enum": [
+              "start_of_day",
+              "end_of_day"
+            ]
+          }
+        },
+        "required": [
+          "currency",
+          "expectedRevision",
+          "accountId",
+          "fileId",
+          "periodFrom",
+          "periodTo",
+          "closingTiming"
+        ],
+        "additionalProperties": false
+      },
+      "idempotencyKeyRequired": true
+    },
+    {
+      "name": "tally_revise_account_statement",
+      "description": "Append an immutable mapping/correction revision. Original bytes and rows remain; linked source rows cannot be rewritten.",
+      "scope": "statements:write",
+      "effect": "write",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "currency": {
+            "type": "string",
+            "enum": [
+              "INR",
+              "USD"
+            ]
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "statementId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "mapping": {
+            "type": "object",
+            "properties": {
+              "dateColumn": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "descriptionColumn": {
+                "anyOf": [
+                  {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "currencyColumn": {
+                "anyOf": [
+                  {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "dateFormat": {
+                "type": "string",
+                "enum": [
+                  "auto",
+                  "mdy",
+                  "dmy"
+                ]
+              },
+              "categoryColumn": {
+                "anyOf": [
+                  {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "amount": {
+                "oneOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "mode": {
+                        "type": "string",
+                        "const": "signed"
+                      },
+                      "amountColumn": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 9007199254740991
+                      },
+                      "positiveAmounts": {
+                        "type": "string",
+                        "enum": [
+                          "income",
+                          "expense"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "mode",
+                      "amountColumn",
+                      "positiveAmounts"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "mode": {
+                        "type": "string",
+                        "const": "debit-credit"
+                      },
+                      "debitColumn": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 9007199254740991
+                      },
+                      "creditColumn": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 9007199254740991
+                      }
+                    },
+                    "required": [
+                      "mode",
+                      "debitColumn",
+                      "creditColumn"
+                    ],
+                    "additionalProperties": false
+                  }
+                ]
+              },
+              "referenceColumn": {
+                "anyOf": [
+                  {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "dateColumn",
+              "descriptionColumn",
+              "currencyColumn",
+              "dateFormat",
+              "amount",
+              "referenceColumn"
+            ],
+            "additionalProperties": false
+          },
+          "corrections": {
+            "maxItems": 100,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "rowNumber": {
+                  "type": "integer",
+                  "exclusiveMinimum": 0,
+                  "maximum": 9007199254740991
+                },
+                "values": {
+                  "maxItems": 100,
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "maxLength": 10000
+                  }
+                }
+              },
+              "required": [
+                "rowNumber",
+                "values"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "metadata": {
+            "type": "object",
+            "properties": {
+              "periodFrom": {
+                "type": "string",
+                "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$"
+              },
+              "periodTo": {
+                "type": "string",
+                "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$"
+              },
+              "openingMinor": {
+                "type": "integer",
+                "minimum": -1000000000000,
+                "maximum": 1000000000000
+              },
+              "closingMinor": {
+                "type": "integer",
+                "minimum": -1000000000000,
+                "maximum": 1000000000000
+              },
+              "closingTiming": {
+                "type": "string",
+                "enum": [
+                  "start_of_day",
+                  "end_of_day"
+                ]
+              }
+            },
+            "additionalProperties": false
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500
+          }
+        },
+        "required": [
+          "currency",
+          "expectedRevision",
+          "statementId",
+          "mapping",
+          "reason"
+        ],
+        "additionalProperties": false
+      },
+      "idempotencyKeyRequired": true
+    },
+    {
+      "name": "tally_list_account_statements",
+      "description": "Read persistent latest statement revisions; currency and account scoped.",
+      "scope": "statements:read",
+      "effect": "read",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "currency": {
+            "type": "string",
+            "enum": [
+              "INR",
+              "USD"
+            ]
+          },
+          "limit": {
+            "default": 50,
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100
+          },
+          "cursor": {
+            "type": "string",
+            "maxLength": 2048
+          },
+          "accountId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          }
+        },
+        "required": [
+          "currency",
+          "limit"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "tally_get_account_statement",
+      "description": "Read statement metadata, paginated original cells before mapping, or mapped source observations with reviewed decisions.",
+      "scope": "statements:read",
+      "effect": "read",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "currency": {
+            "type": "string",
+            "enum": [
+              "INR",
+              "USD"
+            ]
+          },
+          "limit": {
+            "default": 50,
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100
+          },
+          "cursor": {
+            "type": "string",
+            "maxLength": 2048
+          },
+          "statementId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          }
+        },
+        "required": [
+          "currency",
+          "limit",
+          "statementId"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "tally_get_statement_source",
+      "description": "Create a private expiring download for retained immutable source bytes.",
+      "scope": "statements:read",
+      "effect": "prepare",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "currency": {
+            "type": "string",
+            "enum": [
+              "INR",
+              "USD"
+            ]
+          },
+          "sourceFileId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          }
+        },
+        "required": [
+          "currency",
+          "sourceFileId"
+        ],
+        "additionalProperties": false
+      },
+      "idempotencyKeyRequired": true
+    },
+    {
+      "name": "tally_get_statement_matches",
+      "description": "Suggest provider/date/amount matches; similarities never merge or discard rows automatically.",
+      "scope": "statements:read",
+      "effect": "read",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "currency": {
+            "type": "string",
+            "enum": [
+              "INR",
+              "USD"
+            ]
+          },
+          "limit": {
+            "default": 50,
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100
+          },
+          "cursor": {
+            "type": "string",
+            "maxLength": 2048
+          },
+          "statementId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          }
+        },
+        "required": [
+          "currency",
+          "limit",
+          "statementId"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "tally_prepare_statement_changes",
+      "description": "Freeze explicit source classification/link/exclusion decisions and balanced events; select all rows of chosen statements. Multiple account counterparts share one journal.",
+      "scope": "statements:write",
+      "effect": "prepare",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "currency": {
+            "type": "string",
+            "enum": [
+              "INR",
+              "USD"
+            ]
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "statementIds": {
+            "minItems": 1,
+            "maxItems": 10,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          },
+          "decisions": {
+            "maxItems": 1000,
+            "type": "array",
+            "items": {
+              "oneOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "action": {
+                      "type": "string",
+                      "const": "create"
+                    },
+                    "observationIds": {
+                      "minItems": 1,
+                      "maxItems": 100,
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 128
+                      }
+                    },
+                    "event": {
+                      "oneOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "date": {
+                              "type": "string",
+                              "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$"
+                            },
+                            "note": {
+                              "default": "",
+                              "type": "string",
+                              "maxLength": 80
+                            },
+                            "kind": {
+                              "type": "string",
+                              "const": "income"
+                            },
+                            "accountId": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 128
+                            },
+                            "allocations": {
+                              "minItems": 1,
+                              "maxItems": 50,
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "categoryId": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 128
+                                  },
+                                  "amountMinor": {
+                                    "type": "integer",
+                                    "exclusiveMinimum": 0,
+                                    "maximum": 1000000000000
+                                  }
+                                },
+                                "required": [
+                                  "categoryId",
+                                  "amountMinor"
+                                ],
+                                "additionalProperties": false
+                              }
+                            }
+                          },
+                          "required": [
+                            "date",
+                            "note",
+                            "kind",
+                            "accountId",
+                            "allocations"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "date": {
+                              "type": "string",
+                              "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$"
+                            },
+                            "note": {
+                              "default": "",
+                              "type": "string",
+                              "maxLength": 80
+                            },
+                            "kind": {
+                              "type": "string",
+                              "const": "expense"
+                            },
+                            "accountId": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 128
+                            },
+                            "allocations": {
+                              "minItems": 1,
+                              "maxItems": 50,
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "categoryId": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 128
+                                  },
+                                  "amountMinor": {
+                                    "type": "integer",
+                                    "exclusiveMinimum": 0,
+                                    "maximum": 1000000000000
+                                  }
+                                },
+                                "required": [
+                                  "categoryId",
+                                  "amountMinor"
+                                ],
+                                "additionalProperties": false
+                              }
+                            }
+                          },
+                          "required": [
+                            "date",
+                            "note",
+                            "kind",
+                            "accountId",
+                            "allocations"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "date": {
+                              "type": "string",
+                              "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$"
+                            },
+                            "note": {
+                              "default": "",
+                              "type": "string",
+                              "maxLength": 80
+                            },
+                            "kind": {
+                              "type": "string",
+                              "const": "transfer"
+                            },
+                            "fromAccountId": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 128
+                            },
+                            "toAccountId": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 128
+                            },
+                            "amountMinor": {
+                              "type": "integer",
+                              "exclusiveMinimum": 0,
+                              "maximum": 1000000000000
+                            }
+                          },
+                          "required": [
+                            "date",
+                            "note",
+                            "kind",
+                            "fromAccountId",
+                            "toAccountId",
+                            "amountMinor"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "date": {
+                              "type": "string",
+                              "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$"
+                            },
+                            "note": {
+                              "default": "",
+                              "type": "string",
+                              "maxLength": 80
+                            },
+                            "kind": {
+                              "type": "string",
+                              "const": "card_payment"
+                            },
+                            "fromAccountId": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 128
+                            },
+                            "toAccountId": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 128
+                            },
+                            "amountMinor": {
+                              "type": "integer",
+                              "exclusiveMinimum": 0,
+                              "maximum": 1000000000000
+                            }
+                          },
+                          "required": [
+                            "date",
+                            "note",
+                            "kind",
+                            "fromAccountId",
+                            "toAccountId",
+                            "amountMinor"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "date": {
+                              "type": "string",
+                              "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$"
+                            },
+                            "note": {
+                              "default": "",
+                              "type": "string",
+                              "maxLength": 80
+                            },
+                            "kind": {
+                              "type": "string",
+                              "const": "loan_borrowing"
+                            },
+                            "assetAccountId": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 128
+                            },
+                            "loanAccountId": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 128
+                            },
+                            "amountMinor": {
+                              "type": "integer",
+                              "exclusiveMinimum": 0,
+                              "maximum": 1000000000000
+                            }
+                          },
+                          "required": [
+                            "date",
+                            "note",
+                            "kind",
+                            "assetAccountId",
+                            "loanAccountId",
+                            "amountMinor"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "date": {
+                              "type": "string",
+                              "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$"
+                            },
+                            "note": {
+                              "default": "",
+                              "type": "string",
+                              "maxLength": 80
+                            },
+                            "kind": {
+                              "type": "string",
+                              "const": "loan_payment"
+                            },
+                            "assetAccountId": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 128
+                            },
+                            "loanAccountId": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 128
+                            },
+                            "principalMinor": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 1000000000000
+                            },
+                            "allocations": {
+                              "minItems": 1,
+                              "maxItems": 50,
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "categoryId": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 128
+                                  },
+                                  "amountMinor": {
+                                    "type": "integer",
+                                    "exclusiveMinimum": 0,
+                                    "maximum": 1000000000000
+                                  },
+                                  "component": {
+                                    "type": "string",
+                                    "enum": [
+                                      "interest",
+                                      "fee"
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "categoryId",
+                                  "amountMinor",
+                                  "component"
+                                ],
+                                "additionalProperties": false
+                              }
+                            }
+                          },
+                          "required": [
+                            "date",
+                            "note",
+                            "kind",
+                            "assetAccountId",
+                            "loanAccountId",
+                            "principalMinor"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "date": {
+                              "type": "string",
+                              "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$"
+                            },
+                            "note": {
+                              "default": "",
+                              "type": "string",
+                              "maxLength": 80
+                            },
+                            "kind": {
+                              "type": "string",
+                              "const": "refund"
+                            },
+                            "accountId": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 128
+                            },
+                            "originalEventId": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 128
+                            },
+                            "allocations": {
+                              "minItems": 1,
+                              "maxItems": 50,
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "categoryId": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 128
+                                  },
+                                  "amountMinor": {
+                                    "type": "integer",
+                                    "exclusiveMinimum": 0,
+                                    "maximum": 1000000000000
+                                  }
+                                },
+                                "required": [
+                                  "categoryId",
+                                  "amountMinor"
+                                ],
+                                "additionalProperties": false
+                              }
+                            }
+                          },
+                          "required": [
+                            "date",
+                            "note",
+                            "kind",
+                            "accountId",
+                            "originalEventId",
+                            "allocations"
+                          ],
+                          "additionalProperties": false
+                        }
+                      ]
+                    },
+                    "reason": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 500
+                    }
+                  },
+                  "required": [
+                    "action",
+                    "observationIds",
+                    "event",
+                    "reason"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "action": {
+                      "type": "string",
+                      "const": "link"
+                    },
+                    "observationIds": {
+                      "minItems": 1,
+                      "maxItems": 100,
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 128
+                      }
+                    },
+                    "eventId": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 128
+                    },
+                    "reason": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 500
+                    }
+                  },
+                  "required": [
+                    "action",
+                    "observationIds",
+                    "eventId",
+                    "reason"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "action": {
+                      "type": "string",
+                      "const": "exclude"
+                    },
+                    "observationIds": {
+                      "minItems": 1,
+                      "maxItems": 100,
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 128
+                      }
+                    },
+                    "reason": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 500
+                    }
+                  },
+                  "required": [
+                    "action",
+                    "observationIds",
+                    "reason"
+                  ],
+                  "additionalProperties": false
+                }
+              ]
+            }
+          }
+        },
+        "required": [
+          "currency",
+          "expectedRevision",
+          "statementIds",
+          "decisions"
+        ],
+        "additionalProperties": false
+      },
+      "idempotencyKeyRequired": true
+    },
+    {
+      "name": "tally_commit_statement_changes",
+      "description": "Commit the exact reviewed statement/source/journal diff with revision, receipt and audit. When the preview returns approvalRequired=false, send planId, previewHash and expectedRevision directly; otherwise include an owner-approved approvalId.",
+      "scope": "statements:write",
+      "effect": "write",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "currency": {
+            "type": "string",
+            "enum": [
+              "INR",
+              "USD"
+            ]
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "planId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "previewHash": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "approvalId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          }
+        },
+        "required": [
+          "currency",
+          "expectedRevision",
+          "planId"
+        ],
+        "additionalProperties": false
+      },
+      "idempotencyKeyRequired": true
+    },
+    {
+      "name": "tally_prepare_statement_reconciliation",
+      "description": "Freeze observed-versus-recorded closing and unresolved reasons; never creates a balancing plug.",
+      "scope": "statements:write",
+      "effect": "prepare",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "currency": {
+            "type": "string",
+            "enum": [
+              "INR",
+              "USD"
+            ]
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "statementId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          }
+        },
+        "required": [
+          "currency",
+          "expectedRevision",
+          "statementId"
+        ],
+        "additionalProperties": false
+      },
+      "idempotencyKeyRequired": true
+    },
+    {
+      "name": "tally_commit_statement_reconciliation",
+      "description": "Record the reviewed reconciliation snapshot; discrepancies remain visible and are recomputed on later reads. When the preview returns approvalRequired=false, send planId, previewHash and expectedRevision directly; otherwise include an owner-approved approvalId.",
+      "scope": "statements:write",
+      "effect": "write",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "currency": {
+            "type": "string",
+            "enum": [
+              "INR",
+              "USD"
+            ]
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "planId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "previewHash": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "approvalId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          }
+        },
+        "required": [
+          "currency",
+          "expectedRevision",
+          "planId"
+        ],
+        "additionalProperties": false
+      },
+      "idempotencyKeyRequired": true
+    },
+    {
+      "name": "tally_get_statement_coverage",
+      "description": "Read missing periods, overlaps, current reconciliation and saved history for an explicit account/date scope.",
+      "scope": "statements:read",
+      "effect": "read",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "currency": {
+            "type": "string",
+            "enum": [
+              "INR",
+              "USD"
+            ]
+          },
+          "accountId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "from": {
+            "type": "string",
+            "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$"
+          },
+          "to": {
+            "type": "string",
+            "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$"
+          }
+        },
+        "required": [
+          "currency",
+          "accountId",
+          "from",
+          "to"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "tally_stage_legacy_migration",
+      "description": "Snapshot shared legacy entries or an explicitly uploaded backup without posting; preserve originals/settings and keep unassigned evidence separate.",
+      "scope": "migration:write",
+      "effect": "write",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "currency": {
+            "type": "string",
+            "enum": [
+              "INR",
+              "USD"
+            ]
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "fileId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          }
+        },
+        "required": [
+          "currency",
+          "expectedRevision"
+        ],
+        "additionalProperties": false
+      },
+      "idempotencyKeyRequired": true
+    },
+    {
+      "name": "tally_get_legacy_migration",
+      "description": "Read original staged legacy entries/settings and decisions, including cutoff-excluded and unassigned history.",
+      "scope": "migration:read",
+      "effect": "read",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "currency": {
+            "type": "string",
+            "enum": [
+              "INR",
+              "USD"
+            ]
+          },
+          "limit": {
+            "default": 50,
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100
+          },
+          "cursor": {
+            "type": "string",
+            "maxLength": 2048
+          },
+          "batchId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          }
+        },
+        "required": [
+          "currency",
+          "limit",
+          "batchId"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "tally_list_legacy_migrations",
+      "description": "Read staged legacy migration metadata without silently migrating browser data.",
+      "scope": "migration:read",
+      "effect": "read",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "currency": {
+            "type": "string",
+            "enum": [
+              "INR",
+              "USD"
+            ]
+          },
+          "limit": {
+            "default": 50,
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100
+          },
+          "cursor": {
+            "type": "string",
+            "maxLength": 2048
+          }
+        },
+        "required": [
+          "currency",
+          "limit"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "tally_prepare_legacy_migration",
+      "description": "Freeze per-entry convert/cutoff/unassigned decisions; openings are explicit, dates and integer components must match. Shared converted entries leave legacy totals atomically.",
+      "scope": "migration:write",
+      "effect": "prepare",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "currency": {
+            "type": "string",
+            "enum": [
+              "INR",
+              "USD"
+            ]
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "batchId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "decisions": {
+            "maxItems": 1000,
+            "type": "array",
+            "items": {
+              "oneOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "action": {
+                      "type": "string",
+                      "const": "convert"
+                    },
+                    "legacyIds": {
+                      "minItems": 1,
+                      "maxItems": 100,
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 128
+                      }
+                    },
+                    "event": {
+                      "oneOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "date": {
+                              "type": "string",
+                              "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$"
+                            },
+                            "note": {
+                              "default": "",
+                              "type": "string",
+                              "maxLength": 80
+                            },
+                            "kind": {
+                              "type": "string",
+                              "const": "income"
+                            },
+                            "accountId": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 128
+                            },
+                            "allocations": {
+                              "minItems": 1,
+                              "maxItems": 50,
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "categoryId": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 128
+                                  },
+                                  "amountMinor": {
+                                    "type": "integer",
+                                    "exclusiveMinimum": 0,
+                                    "maximum": 1000000000000
+                                  }
+                                },
+                                "required": [
+                                  "categoryId",
+                                  "amountMinor"
+                                ],
+                                "additionalProperties": false
+                              }
+                            }
+                          },
+                          "required": [
+                            "date",
+                            "note",
+                            "kind",
+                            "accountId",
+                            "allocations"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "date": {
+                              "type": "string",
+                              "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$"
+                            },
+                            "note": {
+                              "default": "",
+                              "type": "string",
+                              "maxLength": 80
+                            },
+                            "kind": {
+                              "type": "string",
+                              "const": "expense"
+                            },
+                            "accountId": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 128
+                            },
+                            "allocations": {
+                              "minItems": 1,
+                              "maxItems": 50,
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "categoryId": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 128
+                                  },
+                                  "amountMinor": {
+                                    "type": "integer",
+                                    "exclusiveMinimum": 0,
+                                    "maximum": 1000000000000
+                                  }
+                                },
+                                "required": [
+                                  "categoryId",
+                                  "amountMinor"
+                                ],
+                                "additionalProperties": false
+                              }
+                            }
+                          },
+                          "required": [
+                            "date",
+                            "note",
+                            "kind",
+                            "accountId",
+                            "allocations"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "date": {
+                              "type": "string",
+                              "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$"
+                            },
+                            "note": {
+                              "default": "",
+                              "type": "string",
+                              "maxLength": 80
+                            },
+                            "kind": {
+                              "type": "string",
+                              "const": "transfer"
+                            },
+                            "fromAccountId": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 128
+                            },
+                            "toAccountId": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 128
+                            },
+                            "amountMinor": {
+                              "type": "integer",
+                              "exclusiveMinimum": 0,
+                              "maximum": 1000000000000
+                            }
+                          },
+                          "required": [
+                            "date",
+                            "note",
+                            "kind",
+                            "fromAccountId",
+                            "toAccountId",
+                            "amountMinor"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "date": {
+                              "type": "string",
+                              "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$"
+                            },
+                            "note": {
+                              "default": "",
+                              "type": "string",
+                              "maxLength": 80
+                            },
+                            "kind": {
+                              "type": "string",
+                              "const": "card_payment"
+                            },
+                            "fromAccountId": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 128
+                            },
+                            "toAccountId": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 128
+                            },
+                            "amountMinor": {
+                              "type": "integer",
+                              "exclusiveMinimum": 0,
+                              "maximum": 1000000000000
+                            }
+                          },
+                          "required": [
+                            "date",
+                            "note",
+                            "kind",
+                            "fromAccountId",
+                            "toAccountId",
+                            "amountMinor"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "date": {
+                              "type": "string",
+                              "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$"
+                            },
+                            "note": {
+                              "default": "",
+                              "type": "string",
+                              "maxLength": 80
+                            },
+                            "kind": {
+                              "type": "string",
+                              "const": "loan_borrowing"
+                            },
+                            "assetAccountId": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 128
+                            },
+                            "loanAccountId": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 128
+                            },
+                            "amountMinor": {
+                              "type": "integer",
+                              "exclusiveMinimum": 0,
+                              "maximum": 1000000000000
+                            }
+                          },
+                          "required": [
+                            "date",
+                            "note",
+                            "kind",
+                            "assetAccountId",
+                            "loanAccountId",
+                            "amountMinor"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "date": {
+                              "type": "string",
+                              "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$"
+                            },
+                            "note": {
+                              "default": "",
+                              "type": "string",
+                              "maxLength": 80
+                            },
+                            "kind": {
+                              "type": "string",
+                              "const": "loan_payment"
+                            },
+                            "assetAccountId": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 128
+                            },
+                            "loanAccountId": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 128
+                            },
+                            "principalMinor": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 1000000000000
+                            },
+                            "allocations": {
+                              "minItems": 1,
+                              "maxItems": 50,
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "categoryId": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 128
+                                  },
+                                  "amountMinor": {
+                                    "type": "integer",
+                                    "exclusiveMinimum": 0,
+                                    "maximum": 1000000000000
+                                  },
+                                  "component": {
+                                    "type": "string",
+                                    "enum": [
+                                      "interest",
+                                      "fee"
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "categoryId",
+                                  "amountMinor",
+                                  "component"
+                                ],
+                                "additionalProperties": false
+                              }
+                            }
+                          },
+                          "required": [
+                            "date",
+                            "note",
+                            "kind",
+                            "assetAccountId",
+                            "loanAccountId",
+                            "principalMinor"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "date": {
+                              "type": "string",
+                              "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$"
+                            },
+                            "note": {
+                              "default": "",
+                              "type": "string",
+                              "maxLength": 80
+                            },
+                            "kind": {
+                              "type": "string",
+                              "const": "refund"
+                            },
+                            "accountId": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 128
+                            },
+                            "originalEventId": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 128
+                            },
+                            "allocations": {
+                              "minItems": 1,
+                              "maxItems": 50,
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "categoryId": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 128
+                                  },
+                                  "amountMinor": {
+                                    "type": "integer",
+                                    "exclusiveMinimum": 0,
+                                    "maximum": 1000000000000
+                                  }
+                                },
+                                "required": [
+                                  "categoryId",
+                                  "amountMinor"
+                                ],
+                                "additionalProperties": false
+                              }
+                            }
+                          },
+                          "required": [
+                            "date",
+                            "note",
+                            "kind",
+                            "accountId",
+                            "originalEventId",
+                            "allocations"
+                          ],
+                          "additionalProperties": false
+                        }
+                      ]
+                    },
+                    "reason": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 500
+                    }
+                  },
+                  "required": [
+                    "action",
+                    "legacyIds",
+                    "event",
+                    "reason"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "action": {
+                      "type": "string",
+                      "const": "cutoff"
+                    },
+                    "legacyIds": {
+                      "minItems": 1,
+                      "maxItems": 100,
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 128
+                      }
+                    },
+                    "accountId": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 128
+                    },
+                    "reason": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 500
+                    }
+                  },
+                  "required": [
+                    "action",
+                    "legacyIds",
+                    "accountId",
+                    "reason"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "action": {
+                      "type": "string",
+                      "const": "unassigned"
+                    },
+                    "legacyIds": {
+                      "minItems": 1,
+                      "maxItems": 100,
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 128
+                      }
+                    },
+                    "reason": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 500
+                    }
+                  },
+                  "required": [
+                    "action",
+                    "legacyIds",
+                    "reason"
+                  ],
+                  "additionalProperties": false
+                }
+              ]
+            }
+          }
+        },
+        "required": [
+          "currency",
+          "expectedRevision",
+          "batchId",
+          "decisions"
+        ],
+        "additionalProperties": false
+      },
+      "idempotencyKeyRequired": true
+    },
+    {
+      "name": "tally_commit_legacy_migration",
+      "description": "Commit reviewed legacy conversion once, retaining snapshot/decisions and settings with journal/receipt/audit. When the preview returns approvalRequired=false, send planId, previewHash and expectedRevision directly; otherwise include an owner-approved approvalId.",
+      "scope": "migration:write",
+      "effect": "write",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "currency": {
+            "type": "string",
+            "enum": [
+              "INR",
+              "USD"
+            ]
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "planId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "previewHash": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "approvalId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          }
+        },
+        "required": [
+          "currency",
+          "expectedRevision",
+          "planId"
+        ],
+        "additionalProperties": false
+      },
+      "idempotencyKeyRequired": true
+    }
+  ]
+}

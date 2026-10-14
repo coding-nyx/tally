@@ -1,29 +1,43 @@
-# Hub deployment — 13 October 2026
+# Private standalone deployment
 
-- Private URL: https://finance.example.ts.net/finance/
-- `/finance` redirects to `/finance/`.
-- Tailscale HTTPS on 443 forwards to Caddy on `127.0.0.1:9080`.
-- Caddy preserves `/finance/` when forwarding to Tally on `127.0.0.1:3001`; other paths forward to Vaultwarden on `127.0.0.1:8222`.
-- Caddy's admin listener is `127.0.0.1:2019`. There is no public Funnel or new listener on all interfaces.
-- Compose project: `tally`; containers: `tally-finance-1`, `tally-gateway-1`. Both restart automatically. Docker and Tailscale are enabled at boot.
-- Release directory: `/srv/tally/releases/20261013-finance1`; current symlink: `/srv/tally/current`.
+These files build the Node target at `/finance/`. They are portable deployment templates, not a command to change an existing host. See the root [README](../../README.md) for features, runtime configuration and MCP setup.
 
-## Data and secrets
+## New installation
 
-This deployment hosts the existing browser-local release. There is no shared ledger database, cross-device sync, account sign-in, or active agent HTTP API. Browser JSON export/restore is required to move records between origins or devices. Container backups do not back up browser records. No AI provider credentials were configured or copied; spending chat remains disabled.
+1. Choose protected persistent database/backup storage and secret files outside the checkout. Provision PostgreSQL 17 with a migration role and restricted runtime role. Do not expose its port on the host.
+2. Review `compose.yaml`, `tailnet-access.compose.yaml` and `postgres.compose.yaml`. The base finance service publishes only a loopback host port. Reuse an existing authorized private HTTPS gateway; never enable public access as a setup shortcut.
+3. Supply `TALLY_AGENT_PUBLIC_ORIGIN`, the stable workspace id, exact observed trusted proxy socket IPs, database root and other required Compose substitutions from a protected operator environment. No `.env` or credentials are committed.
+4. Build using `deploy/hub/Dockerfile` (`npm run build:hub`). Keep the router/assets/server functions under `/finance/` consistently. Apply checksum-tracked agent migrations as a separate reviewed operator action, using migration credentials.
+5. Start with the restricted runtime connection supplied through `TALLY_AGENT_DATABASE_URL_FILE`. The entrypoint `scripts/start-tally.mjs` reads selected secret files without logging their contents.
+6. Verify health, canonical HTTPS redirects, assets/manifest, service readiness and tool discovery. Use a disposable database for write tests before any real import.
+7. Verify database restart, backup and isolated restore. Preserve existing route/security configuration, unrelated services and release rollback assets.
 
-## CasaOS removal
+The bearer override `agent-tools.compose.yaml` is an alternative scoped-access setup. Do not combine access modes blindly or overwrite a running configuration. A trusted socket IP must come from the actual proxy connection, not client-controlled forwarding headers.
 
-The six CasaOS services, installed binaries, unit files, configuration, dashboard, and application catalog were removed. Docker, Vaultwarden and its bind-mounted data, Tailscale, k3s-agent, rclone, and devmon were preserved. No container, image, volume, or application-data prune was performed.
+## Existing installation / release
 
-A root-only rollback archive and route/removal records remain in `/var/backups/tally-migration/20261013-finance1/`. The CasaOS archive is `casaos-rollback.tar`. It may contain private configuration and must stay restricted; it is not an off-device backup.
+- Inspect the running image, effective Compose files and current release before changes. Take a protected backup before activation.
+- Build and verify a candidate separately, with synthetic records and no production mounts/ports. A successful candidate test does not deploy it.
+- Activate only the finance image after rollout authorization; preserve the database, private gateway and network settings. There is no schema migration for the manual tracking extension.
+- Verify the actual private URL, desktop/mobile rendering and live discovery after activation. Refresh MCP clients independently.
+- Never blindly restore an old database or select an older image after financial use; preserve later records and source history.
 
-## Verification
+The current application stores finances in PostgreSQL. Historical notes describing browser-only hosting are superseded. Old browser records remain on their original devices until an explicitly reviewed migration; container/database backups do not contain that old browser storage.
 
-- Local standalone and default Vercel builds, typecheck, and lint passed.
-- 301 tests passed, 2 skipped, 0 failed; synthetic fixtures only. Tests used `TMPDIR=/tmp` because the current sandbox does not permit the macOS default temporary directory.
-- Linux ARM64 image built on hub. Tally reports healthy; Vaultwarden stayed healthy.
-- Live HTTPS document, scripts, stylesheet, favicon, manifest, and chat availability server function returned 200. The manifest's ID, scope, and start URL are `/finance/`.
-- Desktop 1280×800 and mobile 390×844 rendering was visually inspected through an isolated agent-browser session. No uncaught errors or mobile horizontal overflow. Entry/import dialogs, cancellation, reload, and the canonical redirect were checked.
-- The standard `browser-smoke.mjs` could not launch its missing Playwright Chromium executable; the live checks above used agent-browser.
-- CasaOS unit inventory is empty; preserved services are active. Root filesystem settings, Wi-Fi, cooling, power resilience, and shared database migration remain future work.
+No provider is configured by these templates. No secrets, personal records, live deployment inventory or host-specific addresses belong in public setup documentation.
+
+## Runtime role on a new database
+
+Create `tally_runtime` as a restricted login role before applying migrations, and set its password through the database operator’s protected channel (for example psql’s interactive `\password`, not a literal in shell history). Apply migrations as the database owner/migration role. Grant `CONNECT` on the chosen database and `USAGE` on its schema, then the application needs:
+
+```sql
+GRANT SELECT, INSERT, UPDATE ON tally_agent_workspaces, tally_financial_accounts TO tally_runtime;
+GRANT SELECT, INSERT ON tally_journal_events, tally_journal_postings TO tally_runtime;
+GRANT SELECT, INSERT ON tally_source_files, tally_statements,
+  tally_statement_observations, tally_event_sources, tally_reconciliations,
+  tally_migration_batches, tally_legacy_decisions TO tally_runtime;
+```
+
+Keep runtime `NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS` and revoke public schema-creation permissions where appropriate for this dedicated database. No runtime DELETE/DDL grant is needed. Migration 0004 conditionally grants its append-only tables if `tally_runtime` already exists; otherwise grant them deliberately after creating the role. Verify with synthetic operations using the runtime connection, not only the migration connection.
+
+The historical `provision-database.py` script is tailored to the existing installation and older activation tooling. It is not a portable new-host installer and must not be run blindly from these instructions.

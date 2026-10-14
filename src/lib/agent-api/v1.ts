@@ -17,59 +17,155 @@ const MAX_MINOR_UNITS = 10_000_000_000;
 const MONTH_PATTERN = /^\d{4}-(0[1-9]|1[0-2])$/;
 
 const currencySchema = z.enum(["INR", "USD"]);
-const dateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine(isCalendarDate);
+const dateSchema = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/)
+  .refine(isCalendarDate);
 const revisionSchema = z.string().min(1).max(128);
-const idempotencySchema = z.string().min(8).max(128).regex(/^[a-zA-Z0-9._:-]+$/);
+const idempotencySchema = z
+  .string()
+  .min(8)
+  .max(128)
+  .regex(/^[a-zA-Z0-9._:-]+$/);
 const monthSchema = z.string().regex(MONTH_PATTERN);
 
-const transactionFieldsSchema = z.object({
-  kind: z.enum(["income", "expense"]),
-  amountMinor: z.number().int().positive().max(MAX_MINOR_UNITS),
-  category: z.string().trim().min(1).max(40),
-  note: z.string().max(80),
-  date: dateSchema,
-}).strict().superRefine((value, context) => {
-  const categories = value.kind === "income" ? INCOME_CATEGORIES : EXPENSE_CATEGORIES;
-  if (!categories.includes(value.category as never)) {
-    context.addIssue({ code: "custom", path: ["category"], message: "Category does not match transaction type." });
-  }
-});
-
-const transactionPatchSchema = z.object({
-  kind: z.enum(["income", "expense"]).optional(),
-  amountMinor: z.number().int().positive().max(MAX_MINOR_UNITS).optional(),
-  category: z.string().trim().min(1).max(40).optional(),
-  note: z.string().max(80).optional(),
-  date: dateSchema.optional(),
-}).strict().refine((patch) => Object.keys(patch).length > 0, "Provide at least one transaction field.");
-
-const monthSettingsSchema = z.object({
-  goalName: z.string().trim().min(1).max(40),
-  goalTargetMinor: z.number().int().positive().max(MAX_MINOR_UNITS),
-  categoryBudgets: z.record(z.string().trim().min(1).max(40), z.number().int().positive().max(MAX_MINOR_UNITS)).superRefine((budgets, context) => {
-    for (const category of Object.keys(budgets)) {
-      if (!(EXPENSE_CATEGORIES as readonly string[]).includes(category)) {
-        context.addIssue({ code: "custom", path: [category], message: "Unknown expense category." });
-      }
+const transactionFieldsSchema = z
+  .object({
+    kind: z.enum(["income", "expense"]),
+    amountMinor: z.number().int().positive().max(MAX_MINOR_UNITS),
+    category: z.string().trim().min(1).max(40),
+    note: z.string().max(80),
+    date: dateSchema,
+  })
+  .strict()
+  .superRefine((value, context) => {
+    const categories = value.kind === "income" ? INCOME_CATEGORIES : EXPENSE_CATEGORIES;
+    if (!categories.includes(value.category as never)) {
+      context.addIssue({
+        code: "custom",
+        path: ["category"],
+        message: "Category does not match transaction type.",
+      });
     }
-  }),
-}).strict();
+  });
+
+const transactionPatchSchema = z
+  .object({
+    kind: z.enum(["income", "expense"]).optional(),
+    amountMinor: z.number().int().positive().max(MAX_MINOR_UNITS).optional(),
+    category: z.string().trim().min(1).max(40).optional(),
+    note: z.string().max(80).optional(),
+    date: dateSchema.optional(),
+  })
+  .strict()
+  .refine((patch) => Object.keys(patch).length > 0, "Provide at least one transaction field.");
+
+const monthSettingsSchema = z
+  .object({
+    goalName: z.string().trim().min(1).max(40),
+    goalTargetMinor: z.number().int().positive().max(MAX_MINOR_UNITS),
+    categoryBudgets: z
+      .record(z.string().trim().min(1).max(40), z.number().int().positive().max(MAX_MINOR_UNITS))
+      .superRefine((budgets, context) => {
+        for (const category of Object.keys(budgets)) {
+          if (!(EXPENSE_CATEGORIES as readonly string[]).includes(category)) {
+            context.addIssue({
+              code: "custom",
+              path: [category],
+              message: "Unknown expense category.",
+            });
+          }
+        }
+      }),
+  })
+  .strict();
 
 const requestSchema = z.discriminatedUnion("operation", [
-  z.object({ version: z.literal(1), operation: z.literal("transactions.list"), currency: currencySchema, month: monthSchema.optional(), offset: z.number().int().min(0).max(1_000_000).default(0), limit: z.number().int().min(1).max(MAX_AGENT_PAGE_SIZE).default(50) }).strict(),
-  z.object({ version: z.literal(1), operation: z.literal("transactions.get"), currency: currencySchema, transactionId: z.string().min(1).max(160) }).strict(),
-  z.object({ version: z.literal(1), operation: z.literal("settings.get"), currency: currencySchema, month: monthSchema }).strict(),
-  z.object({ version: z.literal(1), operation: z.literal("transactions.create"), currency: currencySchema, expectedRevision: revisionSchema, idempotencyKey: idempotencySchema, transaction: transactionFieldsSchema }).strict(),
-  z.object({ version: z.literal(1), operation: z.literal("transactions.update"), currency: currencySchema, expectedRevision: revisionSchema, idempotencyKey: idempotencySchema, transactionId: z.string().min(1).max(160), patch: transactionPatchSchema }).strict(),
-  z.object({ version: z.literal(1), operation: z.literal("transactions.delete"), currency: currencySchema, expectedRevision: revisionSchema, idempotencyKey: idempotencySchema, transactionId: z.string().min(1).max(160) }).strict(),
-  z.object({ version: z.literal(1), operation: z.literal("settings.update"), currency: currencySchema, expectedRevision: revisionSchema, idempotencyKey: idempotencySchema, month: monthSchema, settings: monthSettingsSchema }).strict(),
+  z
+    .object({
+      version: z.literal(1),
+      operation: z.literal("transactions.list"),
+      currency: currencySchema,
+      month: monthSchema.optional(),
+      offset: z.number().int().min(0).max(1_000_000).default(0),
+      limit: z.number().int().min(1).max(MAX_AGENT_PAGE_SIZE).default(50),
+    })
+    .strict(),
+  z
+    .object({
+      version: z.literal(1),
+      operation: z.literal("transactions.get"),
+      currency: currencySchema,
+      transactionId: z.string().min(1).max(160),
+    })
+    .strict(),
+  z
+    .object({
+      version: z.literal(1),
+      operation: z.literal("settings.get"),
+      currency: currencySchema,
+      month: monthSchema,
+    })
+    .strict(),
+  z
+    .object({
+      version: z.literal(1),
+      operation: z.literal("transactions.create"),
+      currency: currencySchema,
+      expectedRevision: revisionSchema,
+      idempotencyKey: idempotencySchema,
+      transaction: transactionFieldsSchema,
+    })
+    .strict(),
+  z
+    .object({
+      version: z.literal(1),
+      operation: z.literal("transactions.update"),
+      currency: currencySchema,
+      expectedRevision: revisionSchema,
+      idempotencyKey: idempotencySchema,
+      transactionId: z.string().min(1).max(160),
+      patch: transactionPatchSchema,
+    })
+    .strict(),
+  z
+    .object({
+      version: z.literal(1),
+      operation: z.literal("transactions.delete"),
+      currency: currencySchema,
+      expectedRevision: revisionSchema,
+      idempotencyKey: idempotencySchema,
+      transactionId: z.string().min(1).max(160),
+    })
+    .strict(),
+  z
+    .object({
+      version: z.literal(1),
+      operation: z.literal("settings.update"),
+      currency: currencySchema,
+      expectedRevision: revisionSchema,
+      idempotencyKey: idempotencySchema,
+      month: monthSchema,
+      settings: monthSettingsSchema,
+    })
+    .strict(),
 ]);
 
 type AgentRequest = z.infer<typeof requestSchema>;
 
 export type AgentApiResponse =
-  | { status: 200; body: { version: "v1"; ok: true; revision: string; data: unknown; replayed?: true } }
-  | { status: 400 | 403 | 404 | 409 | 413 | 503; body: { version: "v1"; ok: false; error: { code: string; message: string; retryable: boolean } } };
+  | {
+      status: 200;
+      body: { version: "v1"; ok: true; revision: string; data: unknown; replayed?: true };
+    }
+  | {
+      status: 400 | 403 | 404 | 409 | 413 | 503;
+      body: {
+        version: "v1";
+        ok: false;
+        error: { code: string; message: string; retryable: boolean };
+      };
+    };
 
 export type AgentCommitResult =
   | { status: "committed" | "replayed"; revision: string }
@@ -103,25 +199,43 @@ export async function executeAgentApiV1(
   adapter: AgentLedgerAdapter,
   policy: AgentApiPolicy,
 ): Promise<AgentApiResponse> {
-  if (encodedSize(input) > 16_384) return fail(413, "REQUEST_TOO_LARGE", "Request exceeds the 16 KB limit.");
+  if (encodedSize(input) > 16_384)
+    return fail(413, "REQUEST_TOO_LARGE", "Request exceeds the 16 KB limit.");
   const parsed = requestSchema.safeParse(input);
-  if (!parsed.success) return fail(400, "INVALID_REQUEST", "Request does not match the Tally agent API v1 schema.");
+  if (!parsed.success)
+    return fail(400, "INVALID_REQUEST", "Request does not match the Tally agent API v1 schema.");
   const request = parsed.data;
 
-  if (!policy.authenticated) return fail(403, "AUTH_REQUIRED", "Authenticate before using the Tally agent API.");
+  if (!policy.authenticated)
+    return fail(403, "AUTH_REQUIRED", "Authenticate before using the Tally agent API.");
   if (isWrite(request) && !policy.writesEnabled) {
-    return fail(403, "WRITE_DISABLED", "Authenticated agent writes are disabled until local API setup is approved.");
+    return fail(
+      403,
+      "WRITE_DISABLED",
+      "Authenticated agent writes are disabled until local API setup is approved.",
+    );
   }
 
   try {
     const snapshot = await adapter.read(request.currency);
-    if (snapshot.data.currency !== request.currency) return fail(409, "CURRENCY_MISMATCH", "The selected ledger currency does not match this request.");
+    if (snapshot.data.currency !== request.currency)
+      return fail(
+        409,
+        "CURRENCY_MISMATCH",
+        "The selected ledger currency does not match this request.",
+      );
     if (!isWrite(request)) return readResponse(request, snapshot.data, snapshot.revision);
 
-    if (request.operation === "transactions.update" && !snapshot.data.transactions.some((transaction) => transaction.id === request.transactionId)) {
+    if (
+      request.operation === "transactions.update" &&
+      !snapshot.data.transactions.some((transaction) => transaction.id === request.transactionId)
+    ) {
       return fail(404, "NOT_FOUND", "Transaction was not found in this currency ledger.");
     }
-    if (request.operation === "transactions.delete" && !snapshot.data.transactions.some((transaction) => transaction.id === request.transactionId)) {
+    if (
+      request.operation === "transactions.delete" &&
+      !snapshot.data.transactions.some((transaction) => transaction.id === request.transactionId)
+    ) {
       const replay = replayResponse(request, snapshot.data, snapshot.revision);
       return replay ?? fail(404, "NOT_FOUND", "Transaction was not found in this currency ledger.");
     }
@@ -129,10 +243,24 @@ export async function executeAgentApiV1(
     if (snapshot.revision !== request.expectedRevision) {
       const replay = replayResponse(request, snapshot.data, snapshot.revision);
       if (replay) return replay;
-      if (request.operation === "transactions.create" && snapshot.data.transactions.some((transaction) => transaction.id === idForIdempotencyKey(request.currency, request.idempotencyKey))) {
-        return fail(409, "IDEMPOTENCY_CONFLICT", "This idempotency key was already used for a different operation.");
+      if (
+        request.operation === "transactions.create" &&
+        snapshot.data.transactions.some(
+          (transaction) =>
+            transaction.id === idForIdempotencyKey(request.currency, request.idempotencyKey),
+        )
+      ) {
+        return fail(
+          409,
+          "IDEMPOTENCY_CONFLICT",
+          "This idempotency key was already used for a different operation.",
+        );
       }
-      return fail(409, "REVISION_CONFLICT", "The ledger changed. Read it again and retry against the new revision.");
+      return fail(
+        409,
+        "REVISION_CONFLICT",
+        "The ledger changed. Read it again and retry against the new revision.",
+      );
     }
 
     const nextData = applyRequest(snapshot.data, request);
@@ -143,17 +271,52 @@ export async function executeAgentApiV1(
       requestFingerprint: stableFingerprintInput(request),
       nextData,
     });
-    if (committed.status === "conflict") return fail(409, "REVISION_CONFLICT", "The ledger changed during this write. Read it again and retry.");
-    if (committed.status === "idempotency-conflict") return fail(409, "IDEMPOTENCY_CONFLICT", "This idempotency key was already used for a different operation.");
-    return success(committed.revision, mutationResult(request, nextData), committed.status === "replayed");
+    if (committed.status === "conflict")
+      return fail(
+        409,
+        "REVISION_CONFLICT",
+        "The ledger changed during this write. Read it again and retry.",
+      );
+    if (committed.status === "idempotency-conflict")
+      return fail(
+        409,
+        "IDEMPOTENCY_CONFLICT",
+        "This idempotency key was already used for a different operation.",
+      );
+    return success(
+      committed.revision,
+      mutationResult(request, nextData),
+      committed.status === "replayed",
+    );
   } catch (error) {
-    if (error instanceof Error && error.message === "invalid-patch") return fail(400, "INVALID_TRANSACTION", "The updated transaction is invalid for its direction or category.");
-    if (error instanceof Error && error.message === "not-found") return fail(404, "NOT_FOUND", "Resource was not found in this currency ledger.");
-    return fail(503, "STORE_UNAVAILABLE", "The Tally ledger adapter is unavailable. No write was confirmed.", true);
+    if (error instanceof Error && error.message === "invalid-patch")
+      return fail(
+        400,
+        "INVALID_TRANSACTION",
+        "The updated transaction is invalid for its direction or category.",
+      );
+    if (error instanceof Error && error.message === "not-found")
+      return fail(404, "NOT_FOUND", "Resource was not found in this currency ledger.");
+    return fail(
+      503,
+      "STORE_UNAVAILABLE",
+      "The Tally ledger adapter is unavailable. No write was confirmed.",
+      true,
+    );
   }
 }
 
-function readResponse(request: Exclude<AgentRequest, { operation: "transactions.create" | "transactions.update" | "transactions.delete" | "settings.update" }>, data: BudgetData, revision: string): AgentApiResponse {
+function readResponse(
+  request: Exclude<
+    AgentRequest,
+    {
+      operation:
+        "transactions.create" | "transactions.update" | "transactions.delete" | "settings.update";
+    }
+  >,
+  data: BudgetData,
+  revision: string,
+): AgentApiResponse {
   switch (request.operation) {
     case "transactions.list": {
       const transactions = data.transactions
@@ -170,16 +333,33 @@ function readResponse(request: Exclude<AgentRequest, { operation: "transactions.
       });
     }
     case "transactions.get": {
-      const transaction = data.transactions.find((candidate) => candidate.id === request.transactionId);
-      return transaction ? success(revision, publicTransaction(transaction)) : fail(404, "NOT_FOUND", "Transaction was not found in this currency ledger.");
+      const transaction = data.transactions.find(
+        (candidate) => candidate.id === request.transactionId,
+      );
+      return transaction
+        ? success(revision, publicTransaction(transaction))
+        : fail(404, "NOT_FOUND", "Transaction was not found in this currency ledger.");
     }
     case "settings.get": {
-      return success(revision, { currency: data.currency, month: request.month, settings: publicSettings(settingsForMonth(data, request.month)) });
+      return success(revision, {
+        currency: data.currency,
+        month: request.month,
+        settings: publicSettings(settingsForMonth(data, request.month)),
+      });
     }
   }
 }
 
-function applyRequest(data: BudgetData, request: Extract<AgentRequest, { operation: "transactions.create" | "transactions.update" | "transactions.delete" | "settings.update" }>): BudgetData {
+function applyRequest(
+  data: BudgetData,
+  request: Extract<
+    AgentRequest,
+    {
+      operation:
+        "transactions.create" | "transactions.update" | "transactions.delete" | "settings.update";
+    }
+  >,
+): BudgetData {
   switch (request.operation) {
     case "transactions.create": {
       const id = idForIdempotencyKey(request.currency, request.idempotencyKey);
@@ -191,19 +371,34 @@ function applyRequest(data: BudgetData, request: Extract<AgentRequest, { operati
       };
     }
     case "transactions.update": {
-      const index = data.transactions.findIndex((candidate) => candidate.id === request.transactionId);
+      const index = data.transactions.findIndex(
+        (candidate) => candidate.id === request.transactionId,
+      );
       if (index < 0) throw new Error("not-found");
       const current = data.transactions[index]!;
-      const patched = { kind: current.kind, amountMinor: current.amountCents, category: current.category, note: current.note, date: current.date, ...request.patch };
+      const patched = {
+        kind: current.kind,
+        amountMinor: current.amountCents,
+        category: current.category,
+        note: current.note,
+        date: current.date,
+        ...request.patch,
+      };
       const validated = transactionFieldsSchema.safeParse(patched);
       if (!validated.success) throw new Error("invalid-patch");
       const transactions = data.transactions.slice();
       transactions[index] = parsePublicTransaction(validated.data, current.id);
-      transactions[index] = { ...transactions[index]!, createdAt: current.createdAt, sample: current.sample };
+      transactions[index] = {
+        ...transactions[index]!,
+        createdAt: current.createdAt,
+        sample: current.sample,
+      };
       return { ...data, transactions, sample: transactions.some((candidate) => candidate.sample) };
     }
     case "transactions.delete": {
-      const transactions = data.transactions.filter((candidate) => candidate.id !== request.transactionId);
+      const transactions = data.transactions.filter(
+        (candidate) => candidate.id !== request.transactionId,
+      );
       if (transactions.length === data.transactions.length) throw new Error("not-found");
       return { ...data, transactions, sample: transactions.some((candidate) => candidate.sample) };
     }
@@ -218,29 +413,72 @@ function applyRequest(data: BudgetData, request: Extract<AgentRequest, { operati
   }
 }
 
-function mutationResult(request: Extract<AgentRequest, { operation: "transactions.create" | "transactions.update" | "transactions.delete" | "settings.update" }>, data: BudgetData): unknown {
+function mutationResult(
+  request: Extract<
+    AgentRequest,
+    {
+      operation:
+        "transactions.create" | "transactions.update" | "transactions.delete" | "settings.update";
+    }
+  >,
+  data: BudgetData,
+): unknown {
   switch (request.operation) {
     case "transactions.create":
-      return publicTransaction(data.transactions.find((transaction) => transaction.id === idForIdempotencyKey(request.currency, request.idempotencyKey))!);
+      return publicTransaction(
+        data.transactions.find(
+          (transaction) =>
+            transaction.id === idForIdempotencyKey(request.currency, request.idempotencyKey),
+        )!,
+      );
     case "transactions.update":
-      return publicTransaction(data.transactions.find((transaction) => transaction.id === request.transactionId)!);
+      return publicTransaction(
+        data.transactions.find((transaction) => transaction.id === request.transactionId)!,
+      );
     case "transactions.delete":
       return { transactionId: request.transactionId, deleted: true };
     case "settings.update":
-      return { currency: data.currency, month: request.month, settings: publicSettings(settingsForMonth(data, request.month)) };
+      return {
+        currency: data.currency,
+        month: request.month,
+        settings: publicSettings(settingsForMonth(data, request.month)),
+      };
   }
 }
 
-function replayResponse(request: Extract<AgentRequest, { operation: "transactions.create" | "transactions.update" | "transactions.delete" | "settings.update" }>, data: BudgetData, revision: string): AgentApiResponse | null {
+function replayResponse(
+  request: Extract<
+    AgentRequest,
+    {
+      operation:
+        "transactions.create" | "transactions.update" | "transactions.delete" | "settings.update";
+    }
+  >,
+  data: BudgetData,
+  revision: string,
+): AgentApiResponse | null {
   switch (request.operation) {
     case "transactions.create": {
-      const existing = data.transactions.find((transaction) => transaction.id === idForIdempotencyKey(request.currency, request.idempotencyKey));
+      const existing = data.transactions.find(
+        (transaction) =>
+          transaction.id === idForIdempotencyKey(request.currency, request.idempotencyKey),
+      );
       if (!existing || !samePublicTransaction(existing, request.transaction)) return null;
       return success(revision, publicTransaction(existing), true);
     }
     case "transactions.update": {
-      const existing = data.transactions.find((transaction) => transaction.id === request.transactionId);
-      if (!existing || !Object.entries(request.patch).every(([key, value]) => existing[key as keyof Transaction] === value)) return null;
+      const existing = data.transactions.find(
+        (transaction) => transaction.id === request.transactionId,
+      );
+      if (
+        !existing ||
+        !Object.entries(request.patch).every(
+          ([key, value]) =>
+            (key === "amountMinor" ? existing.amountCents : existing[key as keyof Transaction]) ===
+            value,
+        )
+      )
+        return null;
       return success(revision, publicTransaction(existing), true);
     }
     case "transactions.delete":
@@ -249,9 +487,17 @@ function replayResponse(request: Extract<AgentRequest, { operation: "transaction
         : success(revision, { transactionId: request.transactionId, deleted: true }, true);
     case "settings.update": {
       const existing = settingsForMonth(data, request.month);
-      const desired = { goalName: request.settings.goalName, goalTargetCents: request.settings.goalTargetMinor, categoryBudgets: request.settings.categoryBudgets };
+      const desired = {
+        goalName: request.settings.goalName,
+        goalTargetCents: request.settings.goalTargetMinor,
+        categoryBudgets: request.settings.categoryBudgets,
+      };
       return JSON.stringify(existing) === JSON.stringify(desired)
-        ? success(revision, { currency: data.currency, month: request.month, settings: publicSettings(existing) }, true)
+        ? success(
+            revision,
+            { currency: data.currency, month: request.month, settings: publicSettings(existing) },
+            true,
+          )
         : null;
     }
   }
@@ -277,7 +523,10 @@ function publicSettings(settings: MonthlySettings) {
   };
 }
 
-function parsePublicTransaction(input: z.infer<typeof transactionFieldsSchema>, id: string): Transaction {
+function parsePublicTransaction(
+  input: z.infer<typeof transactionFieldsSchema>,
+  id: string,
+): Transaction {
   return {
     id,
     kind: input.kind as TxKind,
@@ -290,17 +539,38 @@ function parsePublicTransaction(input: z.infer<typeof transactionFieldsSchema>, 
   };
 }
 
-function samePublicTransaction(transaction: Transaction, input: z.infer<typeof transactionFieldsSchema>): boolean {
-  return transaction.kind === input.kind && transaction.amountCents === input.amountMinor &&
-    transaction.category === input.category && transaction.note === input.note && transaction.date === input.date;
+function samePublicTransaction(
+  transaction: Transaction,
+  input: z.infer<typeof transactionFieldsSchema>,
+): boolean {
+  return (
+    transaction.kind === input.kind &&
+    transaction.amountCents === input.amountMinor &&
+    transaction.category === input.category &&
+    transaction.note === input.note &&
+    transaction.date === input.date
+  );
 }
 
 function idForIdempotencyKey(currency: Currency, key: string): string {
   return `agent:${currency}:${key}`;
 }
 
-function isWrite(request: AgentRequest): request is Extract<AgentRequest, { operation: "transactions.create" | "transactions.update" | "transactions.delete" | "settings.update" }> {
-  return request.operation === "transactions.create" || request.operation === "transactions.update" || request.operation === "transactions.delete" || request.operation === "settings.update";
+function isWrite(
+  request: AgentRequest,
+): request is Extract<
+  AgentRequest,
+  {
+    operation:
+      "transactions.create" | "transactions.update" | "transactions.delete" | "settings.update";
+  }
+> {
+  return (
+    request.operation === "transactions.create" ||
+    request.operation === "transactions.update" ||
+    request.operation === "transactions.delete" ||
+    request.operation === "settings.update"
+  );
 }
 
 function stableFingerprintInput(request: AgentRequest): string {
@@ -308,11 +578,28 @@ function stableFingerprintInput(request: AgentRequest): string {
 }
 
 function success(revision: string, data: unknown, replayed = false): AgentApiResponse {
-  return { status: 200, body: { version: AGENT_API_VERSION, ok: true, revision, data, ...(replayed ? { replayed: true as const } : {}) } };
+  return {
+    status: 200,
+    body: {
+      version: AGENT_API_VERSION,
+      ok: true,
+      revision,
+      data,
+      ...(replayed ? { replayed: true as const } : {}),
+    },
+  };
 }
 
-function fail(status: 400 | 403 | 404 | 409 | 413 | 503, code: string, message: string, retryable = false): AgentApiResponse {
-  return { status, body: { version: AGENT_API_VERSION, ok: false, error: { code, message, retryable } } };
+function fail(
+  status: 400 | 403 | 404 | 409 | 413 | 503,
+  code: string,
+  message: string,
+  retryable = false,
+): AgentApiResponse {
+  return {
+    status,
+    body: { version: AGENT_API_VERSION, ok: false, error: { code, message, retryable } },
+  };
 }
 
 function encodedSize(value: unknown): number {
@@ -326,5 +613,7 @@ function encodedSize(value: unknown): number {
 function isCalendarDate(value: string): boolean {
   const [year, month, day] = value.split("-").map(Number);
   const date = new Date(Date.UTC(year!, month! - 1, day));
-  return date.getUTCFullYear() === year && date.getUTCMonth() === month! - 1 && date.getUTCDate() === day;
+  return (
+    date.getUTCFullYear() === year && date.getUTCMonth() === month! - 1 && date.getUTCDate() === day
+  );
 }

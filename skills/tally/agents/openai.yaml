@@ -1,0 +1,6 @@
+interface:
+  display_name: "Tally"
+  short_description: "Manage Tally ledgers with reviewed agent tools"
+  default_prompt: "Use $tally to inspect my authorized ledger and perform the requested operation with safe retries and the required review."
+policy:
+  allow_implicit_invocation: true

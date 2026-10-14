@@ -94,7 +94,7 @@ export function SpendingChatPanel({ data, month }: { data: BudgetData; month: st
 
       <div className="mt-4 rounded-lg border border-line bg-page p-3 text-sm">
         <p className="font-medium">Before you send</p>
-        <p className="mt-1 text-muted">Your question and this month’s totals, savings goal, and up to 16 category totals and limits will be sent to the configured AI provider. Transaction descriptions, dates, and individual entries stay on this device.</p>
+        <p className="mt-1 text-muted">Your question and this month’s totals, savings goal, and up to 16 category totals and limits will be sent to the configured AI provider. Transaction descriptions, dates, and individual entries are excluded from this AI request.</p>
         {availability.state !== "ready" ? <p className="mt-2 text-muted">{availability.message}</p> : null}
         <label className="mt-3 flex items-start gap-2 text-sm">
           <input type="checkbox" checked={consent} disabled={availability.state !== "ready" || pending} onChange={(event) => setConsent(event.target.checked)} className="mt-1" />

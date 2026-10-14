@@ -37,6 +37,18 @@ export type BudgetLoadResult =
 
 export type BudgetStatus = "no-limit" | "under" | "near" | "at" | "over";
 
+export function safeCategoryName(name: string) {
+  return !Object.hasOwn(Object.prototype, name.trim());
+}
+export function categoryBudget(
+  budgets: Record<string, number>,
+  category: string,
+): number | undefined {
+  if (!Object.hasOwn(budgets, category)) return undefined;
+  const value = budgets[category];
+  return Number.isSafeInteger(value) && value > 0 ? value : undefined;
+}
+
 export const EXPENSE_CATEGORIES = [
   "Housing",
   "Groceries",
@@ -153,9 +165,7 @@ export function spendingByCategory(transactions: Transaction[]): SpendRow[] {
     if (tx.kind !== "expense") continue;
     totals.set(tx.category, (totals.get(tx.category) ?? 0) + tx.amountCents);
   }
-  const entries = [...totals.entries()].sort(
-    (a, b) => b[1] - a[1] || a[0].localeCompare(b[0]),
-  );
+  const entries = [...totals.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
   const parts = shares(entries.map(([, cents]) => cents));
   return entries.map(([category, cents], index) => ({
     category,
@@ -188,12 +198,18 @@ export function budgetStatus(spent: number, limit: number | undefined): BudgetSt
 export function loadBudget(now = new Date(), requestedCurrency?: Currency): BudgetLoadResult {
   let raw: string | null = null;
   try {
-    const activeCurrency = requestedCurrency ?? parseCurrency(localStorage.getItem(ACTIVE_CURRENCY_KEY)) ?? "INR";
+    const activeCurrency =
+      requestedCurrency ?? parseCurrency(localStorage.getItem(ACTIVE_CURRENCY_KEY)) ?? "INR";
     const key = storageKey(activeCurrency);
     raw = localStorage.getItem(key);
     if (raw !== null) {
       const parsed = parseBudgetData(JSON.parse(raw), activeCurrency);
-      if (!parsed) return { status: "error", message: "The saved ledger is invalid or from an unsupported version.", raw };
+      if (!parsed)
+        return {
+          status: "error",
+          message: "The saved ledger is invalid or from an unsupported version.",
+          raw,
+        };
       return { status: "ready", data: parsed, migrated: false };
     }
 
@@ -206,7 +222,8 @@ export function loadBudget(now = new Date(), requestedCurrency?: Currency): Budg
         } catch {
           return {
             status: "error",
-            message: "The older saved ledger could not be read. Its original value has been kept for recovery.",
+            message:
+              "The older saved ledger could not be read. Its original value has been kept for recovery.",
             raw: legacyRaw,
           };
         }
@@ -214,7 +231,8 @@ export function loadBudget(now = new Date(), requestedCurrency?: Currency): Budg
         if (!migrated) {
           return {
             status: "error",
-            message: "The older saved ledger could not be validated. Its original value has been kept for recovery.",
+            message:
+              "The older saved ledger could not be validated. Its original value has been kept for recovery.",
             raw: legacyRaw,
           };
         }
@@ -253,7 +271,11 @@ export function parseBackup(text: string): BudgetData | null {
 }
 
 export function makeBackup(data: BudgetData): string {
-  return JSON.stringify({ format: "tally-budget-backup/v2", currency: data.currency, ledger: data }, null, 2);
+  return JSON.stringify(
+    { format: "tally-budget-backup/v2", currency: data.currency, ledger: data },
+    null,
+    2,
+  );
 }
 
 export function makeRawRecovery(raw: string): string {
@@ -273,7 +295,8 @@ function parseBudgetData(value: unknown, expectedCurrency?: Currency | null): Bu
   const record = value as Record<string, unknown>;
   const currency = parseCurrency(record.currency);
   if (!currency || (expectedCurrency && currency !== expectedCurrency)) return null;
-  if (!Array.isArray(record.transactions) || !isMonthSettingsMap(record.settingsByMonth)) return null;
+  if (!Array.isArray(record.transactions) || !isMonthSettingsMap(record.settingsByMonth))
+    return null;
   const transactions: Transaction[] = [];
   for (const item of record.transactions) {
     const tx = parseTransaction(item, record.sample === true);
@@ -303,11 +326,24 @@ function parseMonthlySettings(value: unknown): MonthlySettings | null {
   if (!value || typeof value !== "object") return null;
   const settings = value as Record<string, unknown>;
   if (typeof settings.goalName !== "string" || settings.goalName.trim().length === 0) return null;
-  if (!Number.isSafeInteger(settings.goalTargetCents) || (settings.goalTargetCents as number) <= 0) return null;
-  if (!settings.categoryBudgets || typeof settings.categoryBudgets !== "object" || Array.isArray(settings.categoryBudgets)) return null;
+  if (!Number.isSafeInteger(settings.goalTargetCents) || (settings.goalTargetCents as number) <= 0)
+    return null;
+  if (
+    !settings.categoryBudgets ||
+    typeof settings.categoryBudgets !== "object" ||
+    Array.isArray(settings.categoryBudgets)
+  )
+    return null;
   const categoryBudgets: Record<string, number> = {};
   for (const [category, amount] of Object.entries(settings.categoryBudgets)) {
-    if (!category.trim() || !Number.isSafeInteger(amount) || (amount as number) <= 0 || (amount as number) > MONEY_LIMIT) return null;
+    if (
+      !category.trim() ||
+      !safeCategoryName(category) ||
+      !Number.isSafeInteger(amount) ||
+      (amount as number) <= 0 ||
+      (amount as number) > MONEY_LIMIT
+    )
+      return null;
     categoryBudgets[category.trim()] = amount as number;
   }
   return {
@@ -322,7 +358,12 @@ function parseTransaction(value: unknown, legacySample: boolean): Transaction | 
   const tx = value as Record<string, unknown>;
   if (typeof tx.id !== "string" || tx.id.length === 0) return null;
   if (tx.kind !== "income" && tx.kind !== "expense") return null;
-  if (typeof tx.amountCents !== "number" || !Number.isSafeInteger(tx.amountCents) || tx.amountCents <= 0) return null;
+  if (
+    typeof tx.amountCents !== "number" ||
+    !Number.isSafeInteger(tx.amountCents) ||
+    tx.amountCents <= 0
+  )
+    return null;
   if (typeof tx.category !== "string" || tx.category.trim().length === 0) return null;
   if (typeof tx.note !== "string") return null;
   if (typeof tx.date !== "string" || !isValidDate(tx.date)) return null;
@@ -344,7 +385,8 @@ function migrateLegacyBudget(value: unknown, now: Date): BudgetData | null {
   const record = value as Record<string, unknown>;
   if (!Array.isArray(record.transactions)) return null;
   if (typeof record.goalName !== "string" || record.goalName.trim().length === 0) return null;
-  if (!Number.isSafeInteger(record.goalTargetCents) || (record.goalTargetCents as number) <= 0) return null;
+  if (!Number.isSafeInteger(record.goalTargetCents) || (record.goalTargetCents as number) <= 0)
+    return null;
   const transactions: Transaction[] = [];
   for (const item of record.transactions) {
     const tx = parseTransaction(item, record.sample === true);
@@ -358,8 +400,15 @@ function migrateLegacyBudget(value: unknown, now: Date): BudgetData | null {
     goalTargetCents: record.goalTargetCents as number,
     categoryBudgets: {},
   };
-  const settingsByMonth = Object.fromEntries([...months].map((month) => [month, { ...settings, categoryBudgets: {} }]));
-  return { currency: "USD", transactions, settingsByMonth, sample: transactions.some((tx) => tx.sample) };
+  const settingsByMonth = Object.fromEntries(
+    [...months].map((month) => [month, { ...settings, categoryBudgets: {} }]),
+  );
+  return {
+    currency: "USD",
+    transactions,
+    settingsByMonth,
+    sample: transactions.some((tx) => tx.sample),
+  };
 }
 
 function isMonthKey(value: string): boolean {
@@ -370,7 +419,9 @@ function isValidDate(value: string): boolean {
   if (!DATE_RE.test(value)) return false;
   const [year, month, day] = value.split("-").map(Number);
   const date = new Date(Date.UTC(year, month - 1, day));
-  return date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day;
+  return (
+    date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day
+  );
 }
 
 function isoDate(year: number, monthIndex: number, day: number): string {
@@ -387,19 +438,97 @@ function seedBudget(now: Date, currency: Currency): BudgetData {
   const base = now.getTime();
   const multiplier = currency === "INR" ? 10 : 1;
   const rows: Array<Omit<Transaction, "id" | "createdAt" | "sample">> = [
-    { kind: "income", amountCents: 480000 * multiplier, category: "Pay", note: "Salary", date: on(1) },
-    { kind: "income", amountCents: 64000 * multiplier, category: "Freelance", note: "Studio invoice", date: on(8) },
-    { kind: "expense", amountCents: 165000 * multiplier, category: "Housing", note: "Rent", date: on(1) },
-    { kind: "expense", amountCents: 8640 * multiplier, category: "Groceries", note: "Sunday market", date: on(2) },
-    { kind: "expense", amountCents: 4200 * multiplier, category: "Transport", note: "Transit card", date: on(3) },
-    { kind: "expense", amountCents: 2850 * multiplier, category: "Dining", note: "Lunch", date: on(4) },
-    { kind: "expense", amountCents: 1599 * multiplier, category: "Subscriptions", note: "Music", date: on(5) },
-    { kind: "expense", amountCents: 9420 * multiplier, category: "Utilities", note: "Electric and water", date: on(6) },
-    { kind: "expense", amountCents: 6215 * multiplier, category: "Groceries", note: "Corner store", date: on(7) },
-    { kind: "expense", amountCents: 4100 * multiplier, category: "Dining", note: "Dinner out", date: on(9) },
-    { kind: "expense", amountCents: 3500 * multiplier, category: "Health", note: "Pharmacy", date: on(10) },
-    { kind: "expense", amountCents: 1800 * multiplier, category: "Transport", note: "Rideshare", date: on(11) },
-    { kind: "expense", amountCents: 2400 * multiplier, category: "Personal", note: "Household", date: on(12) },
+    {
+      kind: "income",
+      amountCents: 480000 * multiplier,
+      category: "Pay",
+      note: "Salary",
+      date: on(1),
+    },
+    {
+      kind: "income",
+      amountCents: 64000 * multiplier,
+      category: "Freelance",
+      note: "Studio invoice",
+      date: on(8),
+    },
+    {
+      kind: "expense",
+      amountCents: 165000 * multiplier,
+      category: "Housing",
+      note: "Rent",
+      date: on(1),
+    },
+    {
+      kind: "expense",
+      amountCents: 8640 * multiplier,
+      category: "Groceries",
+      note: "Sunday market",
+      date: on(2),
+    },
+    {
+      kind: "expense",
+      amountCents: 4200 * multiplier,
+      category: "Transport",
+      note: "Transit card",
+      date: on(3),
+    },
+    {
+      kind: "expense",
+      amountCents: 2850 * multiplier,
+      category: "Dining",
+      note: "Lunch",
+      date: on(4),
+    },
+    {
+      kind: "expense",
+      amountCents: 1599 * multiplier,
+      category: "Subscriptions",
+      note: "Music",
+      date: on(5),
+    },
+    {
+      kind: "expense",
+      amountCents: 9420 * multiplier,
+      category: "Utilities",
+      note: "Electric and water",
+      date: on(6),
+    },
+    {
+      kind: "expense",
+      amountCents: 6215 * multiplier,
+      category: "Groceries",
+      note: "Corner store",
+      date: on(7),
+    },
+    {
+      kind: "expense",
+      amountCents: 4100 * multiplier,
+      category: "Dining",
+      note: "Dinner out",
+      date: on(9),
+    },
+    {
+      kind: "expense",
+      amountCents: 3500 * multiplier,
+      category: "Health",
+      note: "Pharmacy",
+      date: on(10),
+    },
+    {
+      kind: "expense",
+      amountCents: 1800 * multiplier,
+      category: "Transport",
+      note: "Rideshare",
+      date: on(11),
+    },
+    {
+      kind: "expense",
+      amountCents: 2400 * multiplier,
+      category: "Personal",
+      note: "Household",
+      date: on(12),
+    },
   ];
   const month = monthKey(now);
   return {

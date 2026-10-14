@@ -1,0 +1,59 @@
+# Explicit optional override: no deployment or credentials are created by this file.
+# docker compose -f compose.yaml -f agent-tools.compose.yaml ...
+services:
+  database:
+    image: postgres:17-bookworm
+    restart: unless-stopped
+    mem_limit: 256m
+    cpus: 0.75
+    security_opt:
+      - no-new-privileges:true
+    environment:
+      POSTGRES_DB: tally
+      POSTGRES_USER: tally_admin
+      POSTGRES_PASSWORD_FILE: /run/secrets/tally_postgres_password
+    secrets:
+      - tally_postgres_password
+    volumes:
+      - "${TALLY_POSTGRES_DATA_DIR:?Choose a durable data directory}:/var/lib/postgresql/data"
+    # No host port. Only the finance container can use the dedicated network.
+    networks:
+      - ledger
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tally_admin -d tally"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    logging:
+      driver: json-file
+      options:
+        max-size: 5m
+        max-file: "2"
+  finance:
+    depends_on:
+      database:
+        condition: service_healthy
+    environment:
+      TALLY_AGENT_ENABLED: "true"
+      TALLY_AGENT_PUBLIC_ORIGIN: "${TALLY_AGENT_PUBLIC_ORIGIN:?Set canonical HTTPS origin without /finance}"
+      # Exact socket addresses only. Discover the Caddy-to-container gateway;
+      # do not use client X-Forwarded-For values, wildcard addresses or subnets.
+      TALLY_AGENT_TRUSTED_PROXY_IPS: "${TALLY_AGENT_TRUSTED_PROXY_IPS:-}"
+      TALLY_AGENT_DATABASE_URL_FILE: /run/secrets/tally_database_url
+      TALLY_AGENT_GRANTS_JSON_FILE: /run/secrets/tally_agent_grants
+    secrets:
+      - tally_database_url
+      - tally_agent_grants
+    networks:
+      - default
+      - ledger
+networks:
+  ledger:
+    internal: true
+secrets:
+  tally_postgres_password:
+    file: "${TALLY_POSTGRES_PASSWORD_SOURCE:?Choose protected admin password file}"
+  tally_database_url:
+    file: "${TALLY_DATABASE_URL_SOURCE:?Choose protected runtime database URL file}"
+  tally_agent_grants:
+    file: "${TALLY_AGENT_GRANTS_SOURCE:?Choose protected scoped grant file}"

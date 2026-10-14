@@ -1,56 +1,183 @@
 # Tally
 
-Tally is a local-first personal monthly budget planner. Transactions and settings are stored in this browser only. It has no account, bank connection, cloud sync, or network intake.
+A private, single-person finance workspace with a web dashboard and MCP tools backed by the same PostgreSQL ledger. It tracks monthly budgets, financial accounts, card and loan activity, statement evidence, and manually valued investments.
 
-## Developer setup
+Financial data is read and written on the server. The current dashboard does not maintain a browser-local ledger, seed sample records, or silently import old browser data. INR and USD have independent balances, settings, revisions and histories; there is no implicit currency conversion.
 
-- Node.js 22.13 or newer; the Docker deployment and CI use Node 22.
-- npm 10 or newer.
+## Release status
+
+| Surface                                                                          | Status                                                                           |
+| -------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| Shared dashboard, PostgreSQL accounts/journals and statement foundation          | Previously deployed; source synchronized at `4c6ca23`                            |
+| Account institution/last four, enhanced card bills/limits and manual investments | Implemented in this branch; candidate verification completed; not deployed       |
+| UX audit improvements and dated analysis screen                                  | See [UI/UX review](docs/ui-ux-review.md) for exact current verification          |
+| Main branch                                                                      | Separate from `feature/agent-tools`; an open PR does not mean merged or deployed |
+
+The catalog has **99 tools** when statement support is enabled, or **83** without it. A deployed older release may still expose 95. Discover capabilities from the actual service before using tools. Repository code, remote Git state and the running release are separate states.
+
+## Features and where to find them
+
+| Feature                                                                          | Web interface                                                        | MCP/service support                                           |
+| -------------------------------------------------------------------------------- | -------------------------------------------------------------------- | ------------------------------------------------------------- |
+| Monthly income/expense, savings goals, category limits and spending chart        | Dashboard; legacy budget in workspace                                | Transaction, monthly settings, summary and budget tools       |
+| Multiple bank, cash, card and loan accounts                                      | Accounts & debt                                                      | Account create/read/update/archive/restore and opening tools  |
+| Account name, bank/institution and last four digits                              | Account creation and Edit account details                            | `prepare_account`, `prepare_account_update`                   |
+| Dated openings and explicit corrections                                          | Accounts & debt                                                      | Frozen account preview → `commit_account_change`              |
+| Purchases, salary, transfers, ATM, refunds and reversals                         | Record money movement; advanced operations in Tools                  | Journal prepare/commit/reversal and history                   |
+| Card outstanding, limit, available credit, dated bill/minimum/remaining due      | Accounts & debt → Credit cards                                       | Account update/read plus `card_payment` journal events        |
+| Loan principal, borrowing, repayments with interest/fees                         | Accounts & debt → Loans & debt                                       | `loan_borrowing` / `loan_payment` journal events              |
+| Account income/expense and bank/cash movement                                    | Analysis, with explicit report dates                                 | `get_income_expense_report`, `get_cash_flow`                  |
+| Investment accounts, mutual funds, gold, stocks and RDs                          | Investments                                                          | Portfolio/history and investment prepare/commit tools         |
+| Dated valuation corrections, quantity, cost basis, archive/restore, RD estimates | Investments                                                          | Append-only observations; paginated valuation history         |
+| Account statement sources, mapping, classification, matching and reconciliation  | Statements; some advanced decisions still require JSON               | 16 statement/migration tools, enabled explicitly              |
+| CSV/text-PDF import of unassigned budget records and JSON recovery               | Legacy imports                                                       | Upload/stage/map/correct/preview/commit, export/restore tools |
+| Categories and monthly budgets                                                   | Dashboard and Categories                                             | Create/rename/archive/restore and budget tools                |
+| CSV, monthly PDF, JSON and accounting exports                                    | Dashboard More; Accounts/Investments export; Tools                   | Expiring private download handles                             |
+| Approvals, consent, operations, audit and legacy undo                            | Reviews and Advanced tools; not every operation has a dedicated form | Scoped approval/receipt/audit/undo tools                      |
+| Optional spending chat                                                           | Spending chat                                                        | Context-bound external AI consent and request lifecycle       |
+
+Tool names above omit the `tally_` prefix for readability. See the [generated tool schemas](skills/tally/references/tools.json), [bundled operating skill](skills/tally/SKILL.md), and [UI/UX coverage review](docs/ui-ux-review.md), and [all-tool UI inventory](docs/tool-ui-coverage.md).
+
+### Accounting and scope
+
+- Account balances come from reviewed openings and balanced journals. Missing openings mean **unknown**, not zero.
+- Transfers, card repayments and loan principal are not counted again as spending. Borrowing is not income; recorded interest/fees are expenses.
+- The original dashboard reports **unassigned budget transactions**. Account journals are a different record model within the same server workspace. They are not added together automatically. Migration requires explicit reviewed mapping.
+- Card statement due is a dated observation, distinct from current recorded debt. Only recorded card settlements after statement day reduce its remaining due. Pending or unrecorded bank activity is excluded.
+- Investments are **manual dated observations**, not live quotes/NAV or a trade ledger. Values stay separate from bank/card net position. RD maturity values are manual estimates. See [tracking semantics](docs/investment-tracking.md).
+- There is no bank/broker connection, automatic EMI/amortisation, tax/realised-return engine, investment cash posting, SIP/RD auto-debit, reminder worker, hosted HTTP MCP/OAuth or built-in tool-running agent.
+- Statement/migration review has functional foundations but remains an advanced interface. Scanned/encrypted PDFs and OCR are unsupported. Financial imports are never inferred from files or browser storage.
+
+## Application map
+
+```mermaid
+flowchart TD
+  Dashboard[Monthly budget dashboard] --> Accounts[Accounts and debt]
+  Dashboard --> Investments[Manual investments]
+  Dashboard --> Statements[Statement evidence]
+  Dashboard --> Analysis[Dated account analysis]
+  Accounts --> Bank[Bank and cash balances]
+  Accounts --> Card[Credit cards and bills]
+  Accounts --> Loan[Loan principal and repayments]
+  Statements --> Review[Map, match, preview, commit]
+  Analysis --> Chat[Optional spending chat and consent]
+  Workspace[Shared workspace] --> Categories[Categories and budgets]
+  Workspace --> Imports[Legacy imports and recovery]
+  Workspace --> Advanced[Reviews, tools, audit and exports]
+```
+
+## Architecture
+
+```mermaid
+flowchart LR
+  Web[Web UI] --> Service[Typed agent service]
+  MCP[MCP client] --> Bridge[Node stdio bridge]
+  Bridge --> REST[Private REST v2]
+  REST --> Service
+  Service --> DB[(PostgreSQL)]
+  Service --> Consent[Explicit external AI consent]
+```
+
+React 19, TypeScript, TanStack Start/Router, Tailwind and Recharts provide the UI. `src/lib/agent-tools/service.ts` owns financial operations; `catalog.ts` validates their schemas. PostgreSQL locks the canonical workspace and commits changes, revisions, receipts and audit together. Accounts, journals and statements also use normalized tables. Investment history extends the canonical workspace document. No migration runs as part of an application build.
+
+Private shared `tailnet` mode uses the existing trusted private ingress and one shared workspace principal, with **no application login or token prompt**. Every permitted peer has the same authority; this is not per-user or per-agent isolation. Financial writes keep frozen previews, revision/hash checks and durable idempotency, without an extra owner-approval click. Bearer mode retains its scoped owner approvals. External AI sharing still requires explicit consent in either mode.
+
+## Requirements and installation
+
+- Node.js **22.13 or newer** (deployment/CI target Node 22), npm 10+.
+- PostgreSQL 17 for durable shared operation; Docker/Compose for the documented self-hosted target.
+- The Node MCP bridge also requires this checkout's installed dependencies.
 
 ```sh
 npm ci
-npm run dev
+npm run typecheck
+npm test
+npm run lint
 ```
 
-The app is served on `http://localhost:8080`. To start it in the background for a local preview, run `sh startup.sh`; the script resolves the repository directory from its own location and is safe to run again when the app is already responding.
+No secrets belong in source, `.env`, browser storage, URLs, screenshots or prompts. Supply runtime secrets from a protected process environment or selected `*_FILE` secret files.
 
-## Checks
+### Development
+
+The owner has requested that local development/preview servers stay **off** during current work. The commands below document setup; they are not an instruction for an agent to start them automatically.
+
+For an explicitly authorized synthetic demo, `npm run dev:agent-fixtures` starts loopback-only development with synthetic in-memory records and a local provider stub. It does not test durable PostgreSQL or real external AI. For a normal durable development instance, configure the shared service below, then use `npm run dev`. Running `npm run dev` without shared storage does **not** turn the dashboard into a browser-local app. Vite development reads direct process environment variables; the production launcher resolves the selected `*_FILE` secret variables.
+
+### Shared-service configuration
+
+| Variable                             | Purpose                                                                       |
+| ------------------------------------ | ----------------------------------------------------------------------------- |
+| `TALLY_AGENT_ENABLED=true`           | Enable the service                                                            |
+| `TALLY_AGENT_DATABASE_URL` / `_FILE` | Runtime PostgreSQL connection; use a restricted role                          |
+| `TALLY_AGENT_PUBLIC_ORIGIN`          | Exact canonical origin, without the app path                                  |
+| `TALLY_AGENT_AUTH_MODE`              | `tailnet` for existing private shared access, or `bearer`                     |
+| `TALLY_AGENT_WORKSPACE_ID`           | Stable workspace identifier in private shared mode                            |
+| `TALLY_AGENT_TRUSTED_PROXY_IPS`      | Exact verified proxy socket IPs, never a wildcard or client-supplied identity |
+| `TALLY_AGENT_GRANTS_JSON` / `_FILE`  | Scoped token verifiers in bearer mode; unnecessary for tailnet mode           |
+| `TALLY_STATEMENTS_ENABLED=true`      | Explicitly enable the statement/migration tools                               |
+
+Provision a new PostgreSQL database and roles deliberately; do not point setup/QA at an existing financial database. Using migration-role credentials supplied privately, apply the checksum-tracked `migrations/agent-tools/0001`–`0004` migrations:
+
+```sh
+TALLY_AGENT_ENABLED=true npm run agent:migrate
+```
+
+The connection must already be supplied through `TALLY_AGENT_DATABASE_URL` or its file variable. Switch to the restricted runtime role afterwards. See [deployment setup](deploy/hub/README.md); back up an existing database before release changes. Migrations are an operator action, not a browser request or build side effect.
+
+### Build and run
+
+```sh
+npm run build        # default platform build
+npm run build:hub    # standalone Node output, /finance/ base path
+```
+
+The standalone build produces `.output/`. Run `node scripts/start-tally.mjs` from that runtime directory, or use the provided Dockerfile/Compose files. The runtime launcher resolves selected secret files; directly invoking the generated server entry bypasses that launcher. Production uses a loopback host binding behind existing private HTTPS ingress. Do not expose the app/database publicly or widen listeners to solve a connection problem.
+
+### MCP connection
+
+In an MCP client, set the command to the absolute path of your Node executable, arguments to `["--experimental-strip-types", "/absolute/path/to/tally/scripts/tally-mcp.ts"]`. Replace the example script path with this checkout’s absolute path; the absolute argument also works in clients without a working-directory setting. Use Node directly so npm banners do not enter the stdio protocol. Configure these environment variables in the client's protected configuration:
+
+```text
+TALLY_URL=https://<your-host>.<your-tailnet>.ts.net/finance/
+TALLY_AUTH_MODE=tailnet
+```
+
+For a bearer deployment, use `TALLY_AUTH_MODE=bearer` and supply `TALLY_ACCESS_TOKEN` privately. The **client** mode variable differs from server-side `TALLY_AGENT_AUTH_MODE`. Never copy an exposed credential. Restart/refresh client discovery after a catalog update.
+
+Begin with `tally_get_capabilities`, `tally_get_service_status` and `tally_list_ledgers`; discovery does not prove persistence readiness. The same service is available through `npm run agent:cli -- discover` (with the same configured client environment). The bridge is stdio over private REST; no hosted Streamable HTTP endpoint is claimed.
+
+## Project instructions
+
+Read [AGENTS.project.md](AGENTS.project.md) before changing this checkout. Preserve the original dashboard design, private ingress, server-only financial state, independent currencies, frozen intent/revisions and append-only financial history. Use disposable synthetic workspaces for mutations. Keep real records and legacy browser data untouched unless explicitly selected by the owner. Do not inspect/change unrelated agent installations or configure/call AI providers as part of UI QA.
+
+Useful entry points:
+
+- `src/components/budget/`: dashboard, account/card, statement, investment and analysis UI.
+- `src/lib/accounting.ts`, `investments.ts`, `statements.ts`: financial semantics.
+- `src/lib/agent-tools/`: contracts, service, transport, storage and tests.
+- `src/styles.css`: shared palette, typography, fields, buttons and layout foundations.
+- `skills/tally/`: installable operating instructions and generated schemas.
+- `migrations/agent-tools/`: persistent schema; never rewrite applied migrations.
+- `deploy/hub/`: portable private deployment files; keep live secrets/config outside Git.
+
+## Verification and remote synchronization
 
 ```sh
 npm run typecheck
 npm test
 npm run lint
 npm run build
+npm run build:hub
+npm run agent:catalog
+git diff --check
 ```
 
-`npm run build` skips database migration when `DATABASE_URL` is unset. Tally's own data does not use a database. GitHub Actions runs typecheck, tests, lint, the default Vercel build, and the standalone `/finance/` build on Node 22.
+Browser QA must inspect real rendered pages, forms, previews, errors and desktop/tablet/mobile screenshots. Test both UI and actual SDK MCP calls against the compiled runtime and a disposable database; a passing schema test or HTTP 200 alone is insufficient. Record exact coverage and gaps in [UI/UX review](docs/ui-ux-review.md). A disabled provider is an expected state, not a tested AI response. Keep generated runtime files, screenshots, dumps and private QA evidence out of Git.
 
-## Data, currencies, and recovery
+To synchronize authorized changes, inspect `git status`, fetch the remote, review divergence, commit only reviewed source/public documentation and push the intended branch. Never reset local work or force-push. Update generated tool schemas when contracts change. Do not publish private deployment inventories, personal figures or secrets in commit/PR descriptions. A push does not deploy or merge; report all three states separately.
 
-### Private Armbian deployment
+## Recovery
 
-`deploy/hub/` contains a standalone ARM64-compatible Docker build, a Compose service bound to loopback, and a Caddy route for `/finance/`. `npm run build:hub` produces the matching router, asset and server-function base path. Normal development and Vercel builds keep `/`.
+Retain database backups and source evidence before rollout. Legacy JSON restore applies only to the matching unassigned currency ledger; it is not a complete accounting/investment database restore. Accounting exports include journal/investment history but do not introduce a general restore UI. Restore PostgreSQL only as a deliberate operator action tested against an isolated copy. Old browser storage is not automatically read, migrated or deleted.
 
-Tailscale HTTPS forwards to Caddy at `127.0.0.1:9080`; Caddy forwards `/finance/` to Tally at `127.0.0.1:3001` and other paths to the existing Vaultwarden service at `127.0.0.1:8222`. Tally's manifest and install assets are scoped to `/finance/`. No provider secrets are included in the image or Compose configuration.
-
-This hosts the current browser-local release. Hosting does not enable account sign-in, shared database persistence, agent HTTP endpoints, or cross-device sync. Export browser backups regularly; container backups do not contain browser-local financial records. Moving from a local preview to the hosted origin requires an explicit JSON backup export and restore.
-
-
-- INR is the default for a new browser profile. USD is also supported.
-- Switching currency switches to a separate ledger. No exchange rate is applied, and totals are never combined across currencies.
-- Amounts remain integer minor units (paise for INR and cents for USD).
-- The app saves versioned ledgers in browser `localStorage`. Each month's savings goal and category limits are independent. Empty category limits mean no limit; zero is rejected.
-- Legacy `tally.budget.v1` data has no currency field, so migration treats it as USD, preserves its recorded integer cents and transactions, and carries its old single monthly goal into the months represented by the ledger. The original v1 value is left in place as a recovery copy.
-- Use **Export backup** regularly. **Restore backup** replaces the backup's matching currency ledger on this device after a confirmation. If saved JSON cannot be read, Tally keeps the original value and offers a raw download or import of a valid backup instead of replacing it with sample data.
-- **Import statement** reads CSV files locally in your browser. Text-based PDFs are also extracted on-device with a best-effort column layout, editable cell review, and explicit confirmation. Scanned/image-only PDFs, password-protected PDFs, mixed-currency statements, and layouts without recognizable date and amount columns are unsupported. Choose or confirm the date, description, currency, and signed-amount or debit/credit columns; ambiguous dates require an explicit month/day or day/month choice. Possible duplicates are shown and excluded by default, invalid rows stay out, and nothing is saved until you confirm. Amounts are never converted or relabelled when a statement's currency column or symbol conflicts with the selected ledger.
-- **Export CSV** downloads every transaction in the selected currency ledger with date, direction, amount, currency, category, and description. JSON backup remains the full-fidelity recovery format.
-- **Export monthly PDF** creates a Tally-branded report for the visible month. It is labeled for personal reference and not presented as a bank-issued statement.
-- The **Spending chat** server path supports DeepSeek's OpenAI-compatible chat API and other explicitly configured compatible providers. For local macOS setup, first revoke the key previously pasted in chat, then add a replacement to Keychain Access as a generic password with service `com.tally.deepseek` and account `TALLY_AI_API_KEY`. Launch with `npm run dev:deepseek` to explicitly opt in to reading that item; ordinary `npm run dev` and preview startup do not inspect Keychain. For hosted setup, set server-only `TALLY_AI_PROVIDER=deepseek`, `TALLY_AI_MODEL=deepseek-flash` (or another current model from DeepSeek's official docs), and `TALLY_AI_API_KEY` in the host's secure secret manager. The endpoint defaults to `https://api.deepseek.com`; any override must use that exact host. No provider or credential is configured in this checkout. Do not put keys in `.env`, browser settings, source files, or agent prompts. When enabled, each question requires consent; only monthly totals, savings target, and up to 16 category totals/limits are sent. Transaction descriptions and individual entries stay local. Requests have a 500-character prompt cap, 500-token response cap, 15-second timeout, cancellation, and retryable errors. See [DeepSeek API quick start](https://api-docs.deepseek.com/) and [Chat Completions API](https://api-docs.deepseek.com/api/create-chat-completion/).
-
-### Agent API status
-
-An agent API is being prepared, but no HTTP API or server-side ledger is active yet. The canonical ledger remains in this browser's separate INR/USD `localStorage` records. A local server cannot safely update those records. The approved design proposal is one authenticated, loopback-only service backed by one local transactional store used by both the UI and agent API. Do not migrate data or enable remote writes until the user approves migration. Until then, adapter work and tests use synthetic fixtures only. The final API must validate currency and resource scope, enforce version preconditions, bound list responses, require durable idempotency for retries, and authenticate every read and write.
-
-## Release scope
-
-This release covers local ledger persistence/recovery and migration, monthly category budgets and warnings, INR/USD selection, local CSV and text-PDF statement import, CSV and monthly PDF export, and a provider-configurable consent-gated spending chat. AI answers remain inactive until a provider is chosen and securely configured; trends, reminders, bank connections, accounts, and cloud sync remain out of scope. See [PLAN.md](PLAN.md) for the later roadmap.
+The [resume checkpoint](docs/RESUME-CHECKPOINT.md) and [feature/UX review](docs/ui-ux-review.md) describe current work. Older design/deployment notes are historical where they conflict with this README or the checkpoint.
